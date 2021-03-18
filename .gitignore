@@ -1,0 +1,15 @@
+*~
+/BIN/
+/BUILD/
+/LIB/
+/TMP/
+/DOC/
+/TOOLS/sfml/
+/TOOLS/glfw/
+/TOOLS/external/
+/sfml
+/SRC/common/version/version.h
+/.atom-build.*
+/.vscode
+/*.bat
+/*.sh
