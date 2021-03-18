@@ -1,7 +1,7 @@
 #include "chessboardlife.h"
 #include <iostream>
-#include <SFML/Window.hpp>
-#include <SFML/Graphics.hpp>
+#include <sfml/Window.hpp>
+#include <sfml/Graphics.hpp>
 
 using namespace std;
 
