@@ -36,15 +36,19 @@ public:
 /// @brief История событий и действий.
 class MODULE_EXPORT History : public Basis::Entity
 {
+	struct Private;
+
 public:
 	History(Basis::System* s);
 	/// @brief Начать новый шаг.
 	void newStep();
 	/// @brief Запомнить событие или действие.
 	void memorize(std::shared_ptr<Basis::Entity> ent);
+	/// @brief Получить ссылку на текущий временной фрейм.
+	std::shared_ptr<TimeFrame> currentTimeFrame() const;
 
 public:
-	int maxTimeFrames = 10; /// макс. кол-во хранимых фреймов времени ("глубина памяти")
+	std::unique_ptr<Private> _p;
 };
 
 class MODULE_EXPORT Agent : public Basis::Entity
@@ -58,8 +62,12 @@ public:
 	void setEnergy(int e);
 
 protected:
+	/// Сконструировать вспомогательные объекты и т.п.
+	void constructHelpers();
 	// Сгенерировать очередную порцию действий, исходя из текущей обстановки.
 	void makeActions();
+	/// @brief Запомнить событие или действие.
+	void memorize(std::shared_ptr<Basis::Entity> ent);
 
 private:
 	std::unique_ptr<Private> _p;

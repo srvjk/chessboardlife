@@ -12,24 +12,44 @@ TimeFrame::TimeFrame(Basis::System* s) :
 {
 }
 
+struct History::Private
+{
+	int maxTimeFrames = 10; /// макс. кол-во хранимых фреймов времени ("глубина памяти")
+	list<shared_ptr<TimeFrame>> timeFrames;
+};
+
 History::History(Basis::System* s) :
-	Basis::Entity(s)
+	Basis::Entity(s),
+	_p(std::make_unique<Private>())
 {
 
 }
 
 void History::newStep()
 {
-
+	_p->timeFrames.push_back(make_shared<TimeFrame>());
+	if (_p->timeFrames.size() > _p->maxTimeFrames) {
+		_p->timeFrames.pop_front();
+	}
 }
 
 void History::memorize(std::shared_ptr<Basis::Entity> ent)
 {
-
+	shared_ptr<TimeFrame> curTimeFrame = currentTimeFrame();
+	curTimeFrame->eventsAndActions.push_back(ent);
 }
 
-struct Agent::Private 
+std::shared_ptr<TimeFrame> History::currentTimeFrame() const
 {
+	if (!_p->timeFrames.empty())
+		return _p->timeFrames.back();
+
+	return nullptr;
+}
+
+struct Agent::Private
+{
+	bool isFirstStep = true;
 	int energy = 0;
 	std::list<std::shared_ptr<Basis::Entity>> actions;
 };
@@ -74,8 +94,26 @@ void Agent::makeActions()
 	}
 }
 
+void Agent::memorize(std::shared_ptr<Basis::Entity> ent)
+{
+
+}
+
+void Agent::constructHelpers()
+{
+	// конструируем модель мира
+	shared_ptr<Entity> worldModel = newEntity<Entity>();
+	worldModel->setName("WorldModel");
+
+	shared_ptr<Entity> history = worldModel->newEntity<Entity>();
+	history->setName("History");
+}
+
 void Agent::step()
 {
+	if (_p->isFirstStep)
+		constructHelpers();
+
 	// выбираем очередное действие из очереди;
 	// если очередь опустела, формируем новую.
 	if (_p->actions.empty()) {
@@ -103,9 +141,7 @@ void Agent::step()
 	}
 	system()->removeEntity(act->id());
 
-	if (history) {
-		history->memorize(act);
-	}
+	memorize(act);
 }
 
 int Agent::energy() const
@@ -387,15 +423,15 @@ void ChessboardLife::step()
 	shared_ptr<Agent> agent = nullptr;
 	shared_ptr<History> history = nullptr;
 	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
-		auto ent = iter.value()->as<Agent>();
-		if (ent) {
-			agent = ent;
+		auto ag = iter.value()->as<Agent>();
+		if (ag) {
+			agent = ag;
 			break;
 		}
 
-		ent = iter.value()->as<History>();
-		if (ent) {
-			history = ent;
+		auto hist = iter.value()->as<History>();
+		if (hist) {
+			history = hist;
 		}
 	}
 
