@@ -22,35 +22,6 @@ struct Square
 	float height;
 };
 
-/// @brief Временной фрейм для хранения истории событий и действий.
-class MODULE_EXPORT TimeFrame : public Basis::Entity
-{
-public:
-	TimeFrame(Basis::System* s);
-
-public:
-	int64_t stepNo;                                               /// номер шага моделирования (метка времени)
-	std::vector<std::shared_ptr<Basis::Entity>> eventsAndActions; /// события и действия
-};
-
-/// @brief История событий и действий.
-class MODULE_EXPORT History : public Basis::Entity
-{
-	struct Private;
-
-public:
-	History(Basis::System* s);
-	/// @brief Начать новый шаг.
-	void newStep();
-	/// @brief Запомнить событие или действие.
-	void memorize(std::shared_ptr<Basis::Entity> ent);
-	/// @brief Получить ссылку на текущий временной фрейм.
-	std::shared_ptr<TimeFrame> currentTimeFrame() const;
-
-public:
-	std::unique_ptr<Private> _p;
-};
-
 class MODULE_EXPORT Agent : public Basis::Entity
 {
 	struct Private;

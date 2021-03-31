@@ -7,51 +7,12 @@ using namespace std;
 
 static const string ChessboardName = "Chessboard";
 
-TimeFrame::TimeFrame(Basis::System* s) :
-	Basis::Entity(s)
-{
-}
-
-struct History::Private
-{
-	int maxTimeFrames = 10; /// макс. кол-во хранимых фреймов времени ("глубина пам€ти")
-	list<shared_ptr<TimeFrame>> timeFrames;
-};
-
-History::History(Basis::System* s) :
-	Basis::Entity(s),
-	_p(std::make_unique<Private>())
-{
-
-}
-
-void History::newStep()
-{
-	_p->timeFrames.push_back(make_shared<TimeFrame>());
-	if (_p->timeFrames.size() > _p->maxTimeFrames) {
-		_p->timeFrames.pop_front();
-	}
-}
-
-void History::memorize(std::shared_ptr<Basis::Entity> ent)
-{
-	shared_ptr<TimeFrame> curTimeFrame = currentTimeFrame();
-	curTimeFrame->eventsAndActions.push_back(ent);
-}
-
-std::shared_ptr<TimeFrame> History::currentTimeFrame() const
-{
-	if (!_p->timeFrames.empty())
-		return _p->timeFrames.back();
-
-	return nullptr;
-}
-
 struct Agent::Private
 {
 	bool isFirstStep = true;
 	int energy = 0;
 	std::list<std::shared_ptr<Basis::Entity>> actions;
+	int maxTimeFrames = 10;
 };
 
 Agent::Agent(Basis::System* s) :
@@ -96,23 +57,41 @@ void Agent::makeActions()
 
 void Agent::memorize(std::shared_ptr<Basis::Entity> ent)
 {
+	// —ущность ent (обычно это событие или действие) добавл€етс€ в текущий временной фрейм
+	// истории, хран€щейс€ в агенте.
+	shared_ptr<Basis::Container> cont = Basis::toSingle<Basis::Container>(findEntitiesByName("History"));
+	if (!cont)
+		return;
 
+	shared_ptr<Entity> timeFrameEnt = cont->lastItem();
+	cont = timeFrameEnt->as<Basis::Container>();
+	if (cont)
+		cont->addItem(ent);
 }
 
 void Agent::constructHelpers()
 {
-	// конструируем модель мира
-	shared_ptr<Entity> worldModel = newEntity<Entity>();
-	worldModel->setName("WorldModel");
-
-	shared_ptr<Entity> history = worldModel->newEntity<Entity>();
+	shared_ptr<Entity> history = newEntity<Entity>();
 	history->setName("History");
+	history->addFacet<Basis::Container>();
 }
 
 void Agent::step()
 {
 	if (_p->isFirstStep)
 		constructHelpers();
+
+	shared_ptr<Basis::Container> histCont = Basis::toSingle<Basis::Container>(findEntitiesByName("History"));
+	if (!histCont)
+		return;
+
+	// создаЄм новый временной фрейм, при необходимости удал€€ самый старый
+	shared_ptr<Entity> timeFrame = newEntity<Entity>();
+	timeFrame->addFacet<Basis::Container>();
+	histCont->addItem(timeFrame);
+	if (histCont->size() > _p->maxTimeFrames) {
+		histCont->popFront();
+	}
 
 	// выбираем очередное действие из очереди;
 	// если очередь опустела, формируем новую.
@@ -121,15 +100,6 @@ void Agent::step()
 	}
 	if (_p->actions.empty())
 		return;
-
-	shared_ptr<History> history = nullptr;
-	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
-		auto ent = iter.value()->as<History>();
-		if (ent) {
-			history = ent;
-			break;
-		}
-	}
 
 	// выполн€ем действи€;
 	// каждое выполненное действие помещаем в историю
@@ -387,7 +357,6 @@ std::shared_ptr<Square> Chessboard::getSquare(int x, int y)
 struct ChessboardLife::Private
 {
 	int boardSize = 16;              /// размеры "шахматной доски"
-	std::list<TimeFrame> timeFrames; /// временнџе фреймы (истори€ событий и действий)
 };
 
 ChessboardLife::ChessboardLife(Basis::System* sys) :
@@ -406,14 +375,11 @@ ChessboardLife::ChessboardLife(Basis::System* sys) :
 	
 	{
 		auto agent = sys->newEntity<Agent>();
+		agent->setName("Agent");
 		agent->setEnergy(100);
 		auto spt = agent->as<Basis::Spatial>();
 		if (spt)
 			spt->setPosition({ 0.0, 0.0 });
-	}
-
-	{
-		auto history = sys->newEntity<History>();
 	}
 }
 
@@ -421,22 +387,13 @@ void ChessboardLife::step()
 {
 	//std::cout << "ChessboardLife::step()" << endl;
 	shared_ptr<Agent> agent = nullptr;
-	shared_ptr<History> history = nullptr;
 	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
 		auto ag = iter.value()->as<Agent>();
 		if (ag) {
 			agent = ag;
 			break;
 		}
-
-		auto hist = iter.value()->as<History>();
-		if (hist) {
-			history = hist;
-		}
 	}
-
-	if (history)
-		history->newStep();
 
 	if (agent)
 		agent->step();
@@ -446,6 +403,7 @@ struct ChessboardLifeViewer::Private
 {
 	std::unique_ptr<sf::RenderWindow> window = nullptr;
 	sf::Font generalFont;
+	std::string activeAgentName = "Agent";
 };
 
 ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
@@ -520,6 +478,7 @@ void ChessboardLifeViewer::step()
 		_p->window->clear();
 
 		sf::FloatRect boardRect; // область "шахматной доски"
+		sf::FloatRect histRect; // область "истории"
 
 		// рисуем границы области отображени€
 		{
@@ -608,6 +567,39 @@ void ChessboardLifeViewer::step()
 			}
 		}
 
+		// истори€
+		{
+			auto activeAgent = Basis::toSingle<Agent>(system()->findEntitiesByName(_p->activeAgentName));
+			if (activeAgent) {
+				sf::Color bkColor = sf::Color(60, 60, 60);
+				sf::Color foreColor = sf::Color(100, 100, 100);
+
+				histRect.left = boardRect.left + boardRect.width;
+				histRect.top = boardRect.top;
+				histRect.width = viewSize.x - boardRect.width;
+				histRect.height = boardRect.height;
+
+				sf::RectangleShape rectangle;
+				rectangle.setPosition(sf::Vector2f(histRect.left, histRect.top));
+				rectangle.setSize(sf::Vector2f(histRect.width, histRect.height));
+
+				rectangle.setFillColor(bkColor);
+				rectangle.setOutlineColor(foreColor);
+				_p->window->draw(rectangle);
+			}
+
+			if (activeAgent) {
+				auto histCont = Basis::toSingle<Basis::Container>(activeAgent->findEntitiesByName("History"));
+				if (histCont) {
+					for (auto iter = histCont->entityIterator(); iter.hasMore(); iter.next()) {
+						auto timeFrame = iter.value()->as<Basis::Container>();
+						if (timeFrame) {
+							drawTimeFrame(timeFrame);
+						}
+					}
+			}
+		}
+
 		_p->window->display();
 	}
 }
@@ -620,8 +612,6 @@ void setup(Basis::System* s)
 	s->registerEntity<ChessboardLife>();
 	s->registerEntity<ChessboardLifeViewer>();
 	s->registerEntity<Agent>();
-	s->registerEntity<TimeFrame>();
-	s->registerEntity<History>();
 	s->registerEntity<EnergyIncreaseEvent>();
 	s->registerEntity<EnergyDecreaseEvent>();
 	s->registerEntity<MoveAction>();
