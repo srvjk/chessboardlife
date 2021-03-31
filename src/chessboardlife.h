@@ -40,6 +40,10 @@ protected:
 	/// @brief Запомнить событие или действие.
 	void memorize(std::shared_ptr<Basis::Entity> ent);
 
+public:
+	/// @brief Получить максимальное количество тайм-фреймов (глубину истории).
+	int64_t maxTimeFrames() const;
+
 private:
 	std::unique_ptr<Private> _p;
 };
@@ -140,6 +144,9 @@ class MODULE_EXPORT ChessboardLifeViewer : public Basis::Entity
 public:
 	ChessboardLifeViewer(Basis::System* s);
 	void step();
+
+private:
+	void drawTimeFrame(std::shared_ptr<Entity> timeFrame);
 
 private:
 	std::unique_ptr<Private> _p;

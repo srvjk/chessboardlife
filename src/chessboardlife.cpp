@@ -69,6 +69,11 @@ void Agent::memorize(std::shared_ptr<Basis::Entity> ent)
 		cont->addItem(ent);
 }
 
+int64_t Agent::maxTimeFrames() const
+{
+	return _p->maxTimeFrames;
+}
+
 void Agent::constructHelpers()
 {
 	shared_ptr<Entity> history = newEntity<Entity>();
@@ -451,6 +456,8 @@ void ChessboardLifeViewer::step()
 	float textMargin = 5; // поля вокруг текста
 	{
 		sf::Vector2u actualSize = _p->window->getSize();
+		std::cout << "prim. size: " << actualSize.x << ", " << actualSize.y << endl;
+
 		double desiredWidth = actualSize.y / aspectRatio;
 		if (desiredWidth <= actualSize.x) {
 			viewSize.x = desiredWidth;
@@ -465,6 +472,10 @@ void ChessboardLifeViewer::step()
 		double dy = actualSize.y - viewSize.y;
 		viewPos.x = dx / 2.0;
 		viewPos.y = dy / 2.0;
+
+		double viewAspectRatio = viewSize.y / viewSize.x;
+		std::cout << "view size: " << viewSize.x << ", " << viewSize.y << "; " << "aspect ratio: " << viewAspectRatio << endl;
+		std::cout << "view pos: " << viewPos.x << ", " << viewPos.y << endl;
 	}
 
 	if (_p->window->isOpen()) {
@@ -473,21 +484,34 @@ void ChessboardLifeViewer::step()
 		{
 			if (event.type == sf::Event::Closed)
 				_p->window->close();
+
+			switch (event.type) {
+			case sf::Event::Closed:
+				_p->window->close();
+				break;
+			case sf::Event::Resized:
+				_p->window->setView(sf::View(sf::FloatRect(0, 0, event.size.width, event.size.height)));
+				break;
+			}
 		}
 
 		_p->window->clear();
 
+		sf::RectangleShape outRect;
 		sf::FloatRect boardRect; // область "шахматной доски"
 		sf::FloatRect histRect; // область "истории"
 
 		// рисуем границы области отображения
 		{
-			sf::Color bkColor = sf::Color(0, 0, 0);
+			sf::Color bkColor = sf::Color(50, 50, 50);
 			sf::Color foreColor = sf::Color(100, 100, 100);
 
-			sf::RectangleShape outRect;
 			outRect.setPosition(viewPos);
 			outRect.setSize(viewSize);
+
+			sf::Vector2f actPos = outRect.getPosition();
+			sf::Vector2f actSize = outRect.getSize();
+			std::cout << "act. pos: " << actPos.x << ", " << actPos.y << "; " << "act. size: " << actSize.x << ", " << actSize.y << endl;
 
 			outRect.setFillColor(bkColor);
 			outRect.setOutlineColor(foreColor);
@@ -591,17 +615,49 @@ void ChessboardLifeViewer::step()
 			if (activeAgent) {
 				auto histCont = Basis::toSingle<Basis::Container>(activeAgent->findEntitiesByName("History"));
 				if (histCont) {
-					for (auto iter = histCont->entityIterator(); iter.hasMore(); iter.next()) {
-						auto timeFrame = iter.value()->as<Basis::Container>();
-						if (timeFrame) {
-							drawTimeFrame(timeFrame);
-						}
+					sf::Color bkColor = sf::Color(20, 20, 40);
+					sf::Color foreColor = sf::Color(200, 200, 200);
+					int64_t numFrames = histCont->size();
+					int64_t maxFrames = activeAgent->maxTimeFrames();
+					float margin = 2;
+					
+					float frameHeight = histRect.height / maxFrames;
+					float currentY = histRect.top;
+
+					auto items = histCont->items();
+					for (auto it = items.cbegin(); it != items.cend(); ++it) {
+						sf::FloatRect rect;
+						rect.left = histRect.left;
+						rect.top = currentY;
+						rect.width = histRect.width;
+						rect.height = frameHeight;
+
+						sf::RectangleShape rectangle;
+						rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
+						rectangle.setSize(sf::Vector2f(rect.width, rect.height));
+
+						rectangle.setFillColor(bkColor);
+						rectangle.setOutlineColor(foreColor);
+						_p->window->draw(rectangle);
+
+						currentY += (frameHeight + margin);
+
+						//auto timeFrame = iter.value()->as<Basis::Container>();
+						//if (timeFrame) {
+						//	drawTimeFrame(timeFrame);
+						//}
 					}
+				}
 			}
 		}
 
 		_p->window->display();
 	}
+}
+
+void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame)
+{
+	
 }
 
 void setup(Basis::System* s)
