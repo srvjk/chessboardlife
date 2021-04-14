@@ -220,9 +220,16 @@ void MoveSouthAction::moveFunction()
 	if (!spt)
 		return;
 
+	auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
+	if (!chessboard)
+		return;
+
+	int boardSize = chessboard->size();
+
 	Basis::point3d p = spt->position();
 	double y = p.get<1>();
-	p.set<1>(y + 1.0);
+	if (y < boardSize - 1)
+		p.set<1>(y + 1.0);
 	spt->setPosition(p);
 }
 
@@ -248,9 +255,16 @@ void MoveEastAction::moveFunction()
 	if (!spt)
 		return;
 
+	auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
+	if (!chessboard)
+		return;
+
+	int boardSize = chessboard->size();
+
 	Basis::point3d p = spt->position();
 	double x = p.get<0>();
-	p.set<0>(x + 1.0);
+	if (x < boardSize - 1)
+		p.set<0>(x + 1.0);
 	spt->setPosition(p);
 }
 
@@ -319,6 +333,12 @@ void EnergyDecreaseEvent::step()
 
 }
 
+Stone::Stone(Basis::System* s) :
+	Basis::Entity(s)
+{
+	auto spt = addFacet<Basis::Spatial>();
+}
+
 struct Chessboard::Private 
 {
 	int size = 0;
@@ -378,13 +398,31 @@ ChessboardLife::ChessboardLife(Basis::System* sys) :
 		std::cout << "Board created: " << board->name() << endl;
 	board->create(_p->boardSize);
 	
+	// камни
+	{
+		int numStones = 10;
+		for (int i = 0; i < numStones; ++i) {
+			auto stone = sys->newEntity<Stone>();
+			auto spt = stone->as<Basis::Spatial>();
+			if (spt) {
+				float x = (float)sys->randomInt(0, _p->boardSize - 1);
+				float y = (float)sys->randomInt(0, _p->boardSize - 1);
+				spt->setPosition({ x, y });
+			}
+		}
+	}
+
+	// создаем агента и помещаем его в центр мира
 	{
 		auto agent = sys->newEntity<Agent>();
 		agent->setName("Agent");
 		agent->setEnergy(100);
 		auto spt = agent->as<Basis::Spatial>();
-		if (spt)
-			spt->setPosition({ 0.0, 0.0 });
+		if (spt) {
+			float x = _p->boardSize / 2;
+			float y = _p->boardSize / 2;
+			spt->setPosition({ x, y });
+		}
 	}
 }
 
@@ -409,7 +447,40 @@ struct ChessboardLifeViewer::Private
 	std::unique_ptr<sf::RenderWindow> window = nullptr;
 	sf::Font generalFont;
 	std::string activeAgentName = "Agent";
+	std::map<Basis::tid, sf::Color> entityColors;
 };
+
+sf::Color newColor(const std::map<Basis::tid, sf::Color>& colors)
+{
+	int numIter = 5;
+	std::vector<sf::Color> testColors;
+	int maxMetrics = 0;
+	int bestColorIndex = 0;
+
+	for (int i = 0; i < numIter; ++i) {
+		sf::Color col;
+		col.r = Basis::System::randomInt(50, 255);
+		col.g = Basis::System::randomInt(50, 255);
+		col.b = Basis::System::randomInt(50, 255);
+		testColors.push_back(col);
+
+		int metrics = 0;
+		for (auto it = colors.begin(); it != colors.end(); ++it) {
+			sf::Color c = it->second;
+			int dr = col.r - c.r;
+			int dg = col.g - c.g;
+			int db = col.b - c.b;
+			metrics += (dr*dr + dg*dg + db*db);
+		}
+
+		if (metrics > maxMetrics) {
+			bestColorIndex = i;
+			maxMetrics = metrics;
+		}
+	}
+
+	return testColors[bestColorIndex];
+}
 
 ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
 	Basis::Entity(s),
@@ -569,18 +640,37 @@ void ChessboardLifeViewer::step()
 
 			// агенты
 			{
-				sf::Color bkColor = sf::Color(200, 50, 50);
-				sf::Color foreColor = sf::Color(100, 100, 100);
-				sf::RectangleShape rect;
 
 				for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
 					auto agent = iter.value()->as<Agent>();
 					if (agent) {
+						sf::Color bkColor = sf::Color(200, 50, 50);
+						sf::Color foreColor = sf::Color(100, 100, 100);
+						sf::RectangleShape rect;
+
 						auto spt = agent->as<Basis::Spatial>();
 						std::shared_ptr<Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
 
 						float x = boardRect.left + square->x * squareSize;
 						float y = boardRect.top + square->y * squareSize;
+
+						rect.setPosition(sf::Vector2f(x, y));
+						rect.setSize(sf::Vector2f(squareSize, squareSize));
+						rect.setFillColor(bkColor);
+						_p->window->draw(rect);
+					}
+
+					auto stone = iter.value()->as<Stone>();
+					if (stone) {
+						sf::Color bkColor = sf::Color(70, 70, 70);
+						sf::Color foreColor = sf::Color(70, 70, 70);
+
+						auto spt = stone->as<Basis::Spatial>();
+						std::shared_ptr<Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
+
+						float x = boardRect.left + square->x * squareSize;
+						float y = boardRect.top + square->y * squareSize;
+						sf::RectangleShape rect;
 
 						rect.setPosition(sf::Vector2f(x, y));
 						rect.setSize(sf::Vector2f(squareSize, squareSize));
@@ -597,10 +687,11 @@ void ChessboardLifeViewer::step()
 			if (activeAgent) {
 				sf::Color bkColor = sf::Color(60, 60, 60);
 				sf::Color foreColor = sf::Color(100, 100, 100);
+				float margin = 5.0;
 
-				histRect.left = boardRect.left + boardRect.width;
+				histRect.left = boardRect.left + boardRect.width + margin;
 				histRect.top = boardRect.top;
-				histRect.width = viewSize.x - boardRect.width;
+				histRect.width = viewSize.x - boardRect.width - 2 * margin;
 				histRect.height = boardRect.height;
 
 				sf::RectangleShape rectangle;
@@ -615,13 +706,13 @@ void ChessboardLifeViewer::step()
 			if (activeAgent) {
 				auto histCont = Basis::toSingle<Basis::Container>(activeAgent->findEntitiesByName("History"));
 				if (histCont) {
-					sf::Color bkColor = sf::Color(20, 20, 40);
+					sf::Color bkColor = sf::Color(20, 20, 20);
 					sf::Color foreColor = sf::Color(200, 200, 200);
 					int64_t numFrames = histCont->size();
 					int64_t maxFrames = activeAgent->maxTimeFrames();
-					float margin = 2;
+					float margin = 2.0;
 					
-					float frameHeight = histRect.height / maxFrames;
+					float frameHeight = histRect.height / maxFrames - margin;
 					float currentY = histRect.top;
 
 					auto items = histCont->items();
@@ -642,10 +733,7 @@ void ChessboardLifeViewer::step()
 
 						currentY += (frameHeight + margin);
 
-						//auto timeFrame = iter.value()->as<Basis::Container>();
-						//if (timeFrame) {
-						//	drawTimeFrame(timeFrame);
-						//}
+						drawTimeFrame(*it, rect.left, rect.top, rect.width, rect.height);
 					}
 				}
 			}
@@ -655,9 +743,48 @@ void ChessboardLifeViewer::step()
 	}
 }
 
-void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame)
+void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height)
 {
-	
+	float margin = 2.0;
+	float itemWidth = 10.0;
+	float itemHeight = 10.0;
+	//sf::Color bkColor = sf::Color(200, 200, 20);
+	sf::Color foreColor = sf::Color(200, 200, 200);
+
+	shared_ptr<Basis::Container> cont = timeFrame->as<Basis::Container>();
+	auto items = cont->items();
+	float currentX = left;
+	float currentY = top;
+	for (auto it = items.cbegin(); it != items.cend(); ++it) {
+		sf::FloatRect rect;
+		rect.left = currentX;
+		rect.top = currentY;
+		rect.width = itemWidth;
+		rect.height = itemHeight;
+
+		sf::RectangleShape rectangle;
+		rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
+		rectangle.setSize(sf::Vector2f(rect.width, rect.height));
+
+		//rectangle.setFillColor(bkColor);
+
+		sf::Color color;
+		Basis::tid typeId = (*it)->typeId();
+		auto colorIter = _p->entityColors.find(typeId);
+		if (colorIter != _p->entityColors.end()) {
+			color = colorIter->second;
+		}
+		else {
+			color = newColor(_p->entityColors);
+			_p->entityColors.insert({ typeId, color });
+		}
+		rectangle.setFillColor(color);
+		rectangle.setOutlineColor(foreColor);
+		_p->window->draw(rectangle);
+
+		currentX += (itemWidth + margin);
+		//currentY += (itemHeight + margin);
+	}
 }
 
 void setup(Basis::System* s)
@@ -676,4 +803,5 @@ void setup(Basis::System* s)
 	s->registerEntity<MoveSouthAction>();
 	s->registerEntity<MoveEastAction>();
 	s->registerEntity<MoveWestAction>();
+	s->registerEntity<Stone>();
 }

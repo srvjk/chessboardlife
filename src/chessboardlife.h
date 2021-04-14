@@ -111,6 +111,12 @@ public:
 	void step();
 };
 
+class MODULE_EXPORT Stone : public Basis::Entity
+{
+public:
+	Stone(Basis::System* s);
+};
+
 class MODULE_EXPORT Chessboard : public Basis::Entity
 {
 	struct Private;
@@ -146,7 +152,7 @@ public:
 	void step();
 
 private:
-	void drawTimeFrame(std::shared_ptr<Entity> timeFrame);
+	void drawTimeFrame(std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
 
 private:
 	std::unique_ptr<Private> _p;
