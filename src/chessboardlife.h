@@ -97,20 +97,6 @@ public:
 	void moveFunction();
 };
 
-class MODULE_EXPORT EnergyIncreaseEvent : public Basis::Entity
-{
-public:
-	EnergyIncreaseEvent(Basis::System* s);
-	void step();
-};
-
-class MODULE_EXPORT EnergyDecreaseEvent : public Basis::Entity
-{
-public:
-	EnergyDecreaseEvent(Basis::System* s);
-	void step();
-};
-
 class MODULE_EXPORT Stone : public Basis::Entity
 {
 public:

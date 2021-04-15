@@ -98,6 +98,30 @@ void Agent::step()
 		histCont->popFront();
 	}
 
+	// осматриваемся, оцениваем обстановку, принимаем решения...
+	{
+		auto spt = this->as<Basis::Spatial>();
+		Basis::point3d pos = spt->position();
+		int x = (int)pos.get<0>();
+		int y = (int)pos.get<1>();
+
+		for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
+			auto stone = iter.value()->as<Stone>();
+			if (stone) {
+				auto stoneSpt = stone->as<Basis::Spatial>();
+				Basis::point3d stonePos = stoneSpt->position();
+				int stoneX = (int)stonePos.get<0>();
+				int stoneY = (int)stonePos.get<1>();
+
+				if (x == stoneX && y == stoneY) {
+					auto collisionEvent = newEntity<Basis::Entity>();
+					collisionEvent->setName("Collision");
+					memorize(collisionEvent);
+				}
+			}
+		}
+	}
+
 	// выбираем очередное действие из очереди;
 	// если очередь опустела, формируем новую.
 	if (_p->actions.empty()) {
@@ -298,41 +322,6 @@ void MoveWestAction::moveFunction()
 	}
 }
 
-EnergyIncreaseEvent::EnergyIncreaseEvent(Basis::System* s)
-{
-	auto exe = addFacet<Basis::Executable>();
-	if (exe)
-		exe->setStepFunction(std::bind(&EnergyIncreaseEvent::step, this));
-}
-
-void EnergyIncreaseEvent::step()
-{
-	Entity* p = parent();
-	if (!p)
-		return;
-
-	shared_ptr<Agent> agent = p->as<Agent>();
-	if (agent) {
-		int e = agent->energy();
-		e = e + 1;
-		agent->setEnergy(e);
-	}
-
-	//die();
-}
-
-EnergyDecreaseEvent::EnergyDecreaseEvent(Basis::System* s)
-{
-	auto exe = addFacet<Basis::Executable>();
-	if (exe)
-		exe->setStepFunction(std::bind(&EnergyDecreaseEvent::step, this));
-}
-
-void EnergyDecreaseEvent::step()
-{
-
-}
-
 Stone::Stone(Basis::System* s) :
 	Basis::Entity(s)
 {
@@ -381,7 +370,7 @@ std::shared_ptr<Square> Chessboard::getSquare(int x, int y)
 
 struct ChessboardLife::Private
 {
-	int boardSize = 16;              /// размеры "шахматной доски"
+	int boardSize = 16; /// размеры "шахматной доски"
 };
 
 ChessboardLife::ChessboardLife(Basis::System* sys) :
@@ -527,7 +516,6 @@ void ChessboardLifeViewer::step()
 	float textMargin = 5; // поля вокруг текста
 	{
 		sf::Vector2u actualSize = _p->window->getSize();
-		std::cout << "prim. size: " << actualSize.x << ", " << actualSize.y << endl;
 
 		double desiredWidth = actualSize.y / aspectRatio;
 		if (desiredWidth <= actualSize.x) {
@@ -545,8 +533,6 @@ void ChessboardLifeViewer::step()
 		viewPos.y = dy / 2.0;
 
 		double viewAspectRatio = viewSize.y / viewSize.x;
-		std::cout << "view size: " << viewSize.x << ", " << viewSize.y << "; " << "aspect ratio: " << viewAspectRatio << endl;
-		std::cout << "view pos: " << viewPos.x << ", " << viewPos.y << endl;
 	}
 
 	if (_p->window->isOpen()) {
@@ -582,7 +568,6 @@ void ChessboardLifeViewer::step()
 
 			sf::Vector2f actPos = outRect.getPosition();
 			sf::Vector2f actSize = outRect.getSize();
-			std::cout << "act. pos: " << actPos.x << ", " << actPos.y << "; " << "act. size: " << actSize.x << ", " << actSize.y << endl;
 
 			outRect.setFillColor(bkColor);
 			outRect.setOutlineColor(foreColor);
@@ -749,6 +734,7 @@ void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame, floa
 	float itemWidth = 10.0;
 	float itemHeight = 10.0;
 	//sf::Color bkColor = sf::Color(200, 200, 20);
+	sf::Color collisionColor = sf::Color(255, 50, 50);
 	sf::Color foreColor = sf::Color(200, 200, 200);
 
 	shared_ptr<Basis::Container> cont = timeFrame->as<Basis::Container>();
@@ -780,6 +766,11 @@ void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame, floa
 		}
 		rectangle.setFillColor(color);
 		rectangle.setOutlineColor(foreColor);
+
+		if ((*it)->name() == "Collision") {
+			rectangle.setFillColor(collisionColor);
+		}
+
 		_p->window->draw(rectangle);
 
 		currentX += (itemWidth + margin);
@@ -795,8 +786,6 @@ void setup(Basis::System* s)
 	s->registerEntity<ChessboardLife>();
 	s->registerEntity<ChessboardLifeViewer>();
 	s->registerEntity<Agent>();
-	s->registerEntity<EnergyIncreaseEvent>();
-	s->registerEntity<EnergyDecreaseEvent>();
 	s->registerEntity<MoveAction>();
 	s->registerEntity<StandByAction>();
 	s->registerEntity<MoveNorthAction>();
