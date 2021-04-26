@@ -153,6 +153,45 @@ void Agent::setEnergy(int e)
 	_p->energy = e;
 }
 
+struct ChessboardTypes::Image 
+{
+	Image(int w, int h)
+	{
+
+	}
+};
+
+struct NeighborhoodSensor::Private
+{
+	std::shared_ptr<ChessboardTypes::Image> neighborhoodImage;
+};
+
+NeighborhoodSensor::NeighborhoodSensor(Basis::System* s) :
+	Basis::Entity(s),
+	_p(std::make_unique<Private>())
+{
+}
+
+void NeighborhoodSensor::step()
+{
+	Basis::Spatial* spt = firstSuchParent<Basis::Spatial>();
+	if (!spt)
+		return;
+
+	Basis::point3d pos = spt->position();
+	int x = (int)pos.get<0>();
+	int y = (int)pos.get<1>();
+	auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
+	if (!chessboard)
+		return;
+
+	if (!_p->neighborhoodImage) {
+		_p->neighborhoodImage = std::make_shared<ChessboardTypes::Image>(3, 3);
+	}
+
+	chessboard->getImage(x - 1, y - 1, _p->neighborhoodImage.get());
+}
+
 struct MoveAction::Private 
 {
 	Basis::Entity* object = nullptr;
@@ -331,7 +370,7 @@ Stone::Stone(Basis::System* s) :
 struct Chessboard::Private 
 {
 	int size = 0;
-	vector<std::shared_ptr<Square>> squares;
+	vector<std::shared_ptr<ChessboardTypes::Square>> squares;
 };
 
 Chessboard::Chessboard(Basis::System* sys) :
@@ -345,7 +384,7 @@ void Chessboard::create(int size)
 	_p->size = size;
 	for (int y = 0; y < size; ++y) {
 		for (int x = 0; x < size; ++x) {
-			auto square = std::make_shared<Square>();
+			auto square = std::make_shared<ChessboardTypes::Square>();
 			square->x = x;
 			square->y = y;
 
@@ -359,13 +398,18 @@ int Chessboard::size() const
 	return _p->size;
 }
 
-std::shared_ptr<Square> Chessboard::getSquare(int x, int y)
+std::shared_ptr<ChessboardTypes::Square> Chessboard::getSquare(int x, int y)
 {
 	int index = y * _p->size + x;
 	if (index < _p->squares.size())
 		return _p->squares[index];
 
 	return nullptr;
+}
+
+void Chessboard::getImage(int x, int y, ChessboardTypes::Image* img)
+{
+
 }
 
 struct ChessboardLife::Private
@@ -634,7 +678,7 @@ void ChessboardLifeViewer::step()
 						sf::RectangleShape rect;
 
 						auto spt = agent->as<Basis::Spatial>();
-						std::shared_ptr<Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
+						std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
 
 						float x = boardRect.left + square->x * squareSize;
 						float y = boardRect.top + square->y * squareSize;
@@ -651,7 +695,7 @@ void ChessboardLifeViewer::step()
 						sf::Color foreColor = sf::Color(70, 70, 70);
 
 						auto spt = stone->as<Basis::Spatial>();
-						std::shared_ptr<Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
+						std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
 
 						float x = boardRect.left + square->x * squareSize;
 						float y = boardRect.top + square->y * squareSize;
@@ -786,6 +830,7 @@ void setup(Basis::System* s)
 	s->registerEntity<ChessboardLife>();
 	s->registerEntity<ChessboardLifeViewer>();
 	s->registerEntity<Agent>();
+	s->registerEntity<NeighborhoodSensor>();
 	s->registerEntity<MoveAction>();
 	s->registerEntity<StandByAction>();
 	s->registerEntity<MoveNorthAction>();

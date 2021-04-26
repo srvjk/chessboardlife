@@ -12,15 +12,20 @@
 #  define MODULE_EXPORT
 #endif
 
-struct Square
+namespace ChessboardTypes 
 {
-	int x;
-	int y;
-	float left;
-	float top;
-	float width;
-	float height;
-};
+	struct Square
+	{
+		int x;
+		int y;
+		float left;
+		float top;
+		float width;
+		float height;
+	};
+
+	struct Image;
+}
 
 class MODULE_EXPORT Agent : public Basis::Entity
 {
@@ -43,6 +48,21 @@ protected:
 public:
 	/// @brief Получить максимальное количество тайм-фреймов (глубину истории).
 	int64_t maxTimeFrames() const;
+
+private:
+	std::unique_ptr<Private> _p;
+};
+
+/// @brief Сенсор окружающего пространства.
+///
+/// Дает агенту простейшее "зрение".
+class MODULE_EXPORT NeighborhoodSensor : public Basis::Entity
+{
+	struct Private;
+
+public:
+	NeighborhoodSensor(Basis::System* s);
+	void step();
 
 private:
 	std::unique_ptr<Private> _p;
@@ -111,7 +131,8 @@ public:
 	Chessboard(Basis::System* s);
 	void create(int size);
 	int size() const;
-	std::shared_ptr<Square> getSquare(int x, int y);
+	std::shared_ptr<ChessboardTypes::Square> getSquare(int x, int y);
+	void getImage(int x, int y, ChessboardTypes::Image* img);
 
 private:
 	std::unique_ptr<Private> _p;
