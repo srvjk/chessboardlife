@@ -63,6 +63,8 @@ class MODULE_EXPORT NeighborhoodSensor : public Basis::Entity
 public:
 	NeighborhoodSensor(Basis::System* s);
 	void step();
+	std::tuple<int, int> getSize() const;
+	std::tuple<int, int, int> getPixel(int x, int y) const;
 
 private:
 	std::unique_ptr<Private> _p;

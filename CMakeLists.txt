@@ -6,6 +6,8 @@ project (${PROJECT})
 
 cmake_policy(SET CMP0074 NEW)
 
+set (CMAKE_CXX_STANDARD 17)
+
 file (GLOB_RECURSE HEADERS "src/*.h")
 file (GLOB_RECURSE SOURCES "src/*.cpp")
 

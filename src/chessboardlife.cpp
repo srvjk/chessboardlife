@@ -6,6 +6,7 @@
 using namespace std;
 
 static const string ChessboardName = "Chessboard";
+static const string NeighborhoodSensorName = "NeighborhoodSensor";
 
 struct Agent::Private
 {
@@ -79,6 +80,9 @@ void Agent::constructHelpers()
 	shared_ptr<Entity> history = newEntity<Entity>();
 	history->setName("History");
 	history->addFacet<Basis::Container>();
+
+	shared_ptr<Entity> neighborhoodSensor = newEntity<NeighborhoodSensor>();
+	neighborhoodSensor->setName(NeighborhoodSensorName);
 }
 
 void Agent::step()
@@ -120,6 +124,11 @@ void Agent::step()
 				}
 			}
 		}
+
+		auto vision = Basis::toSingle<NeighborhoodSensor>(findEntitiesByName(NeighborhoodSensorName));
+		if (vision) {
+			vision->step();
+		}
 	}
 
 	// выбираем очередное действие из очереди;
@@ -157,8 +166,16 @@ struct ChessboardTypes::Image
 {
 	Image(int w, int h)
 	{
-
+		width = w;
+		height = h;
+		int length = width * height;
+		if (length > 0)
+			pixels = std::vector<sf::Color>(length, sf::Color(0, 0, 0));
 	}
+
+	int width = 0;
+	int height = 0;
+	std::vector<sf::Color> pixels;
 };
 
 struct NeighborhoodSensor::Private
@@ -190,6 +207,28 @@ void NeighborhoodSensor::step()
 	}
 
 	chessboard->getImage(x - 1, y - 1, _p->neighborhoodImage.get());
+}
+
+std::tuple<int, int> NeighborhoodSensor::getSize() const
+{
+	if (!_p->neighborhoodImage)
+		return std::make_tuple(0, 0);
+
+	return std::make_tuple(_p->neighborhoodImage->width, _p->neighborhoodImage->height);
+}
+
+std::tuple<int, int, int> NeighborhoodSensor::getPixel(int x, int y) const
+{
+	if (!_p->neighborhoodImage)
+		return std::make_tuple(0, 0, 0);
+
+	if (x < 0 || x >= _p->neighborhoodImage->width)
+		return std::make_tuple(0, 0, 0);
+	if (y < 0 || y >= _p->neighborhoodImage->height)
+		return std::make_tuple(0, 0, 0);
+
+	sf::Color c = _p->neighborhoodImage->pixels.at((size_t)(y * _p->neighborhoodImage->width) + x);
+	return std::make_tuple(c.r, c.g, c.b);
 }
 
 struct MoveAction::Private 
@@ -409,7 +448,19 @@ std::shared_ptr<ChessboardTypes::Square> Chessboard::getSquare(int x, int y)
 
 void Chessboard::getImage(int x, int y, ChessboardTypes::Image* img)
 {
+	if (!img)
+		return;
 
+	for (int i = 0; i < img->height; ++i) {
+		for (int j = 0; j < img->width; ++j) {
+			int indx = i * img->width + j;
+			img->pixels[indx] = sf::Color(
+				Basis::System::randomInt(0, 255),
+				Basis::System::randomInt(0, 255),
+				Basis::System::randomInt(0, 255)
+			);
+		}
+	}
 }
 
 struct ChessboardLife::Private
@@ -478,6 +529,7 @@ void ChessboardLife::step()
 struct ChessboardLifeViewer::Private
 {
 	std::unique_ptr<sf::RenderWindow> window = nullptr;
+	std::unique_ptr<sf::RenderWindow> visionWindow = nullptr;
 	sf::Font generalFont;
 	std::string activeAgentName = "Agent";
 	std::map<Basis::tid, sf::Color> entityColors;
@@ -601,6 +653,8 @@ void ChessboardLifeViewer::step()
 		sf::RectangleShape outRect;
 		sf::FloatRect boardRect; // область "шахматной доски"
 		sf::FloatRect histRect; // область "истории"
+		sf::FloatRect visionRect; // область "зрения" агента
+		int visionRectSize = 20;
 
 		// рисуем границы области отображения
 		{
@@ -769,6 +823,58 @@ void ChessboardLifeViewer::step()
 		}
 
 		_p->window->display();
+
+		// зрение
+		if (!_p->visionWindow) {
+			_p->visionWindow = make_unique<sf::RenderWindow>(sf::VideoMode(200, 200), "Vision");
+		}
+
+		if (_p->visionWindow) {
+			if (_p->visionWindow->isOpen()) {
+				sf::Vector2u actualSize = _p->visionWindow->getSize();
+
+				// окрестности агента
+				{
+					auto activeAgent = Basis::toSingle<Agent>(system()->findEntitiesByName(_p->activeAgentName));
+					std::shared_ptr<NeighborhoodSensor> vision = nullptr;
+					if (activeAgent) {
+						vision = Basis::toSingle<NeighborhoodSensor>(activeAgent->findEntitiesByName(NeighborhoodSensorName));
+					}
+
+					if (vision) {
+						sf::Color bkColor = sf::Color(60, 60, 60);
+						sf::Color foreColor = sf::Color(100, 100, 100);
+						float margin = 5.0;
+
+						auto [w, h] = vision->getSize();
+						if (w > 0 && h > 0) {
+							float cellSizeX = (float)actualSize.x / (float)w;
+							float cellSizeY = (float)actualSize.y / (float)h;
+							float squareSize = std::min(cellSizeX, cellSizeY);
+
+							float y = 0;
+							for (int row = 0; row < h; ++row) {
+								float x = 0;
+								for (int col = 0; col < w; ++col) {
+									auto [r, g, b] = vision->getPixel(col, row);
+									sf::RectangleShape rect;
+									rect.setPosition(sf::Vector2f(x, y));
+									rect.setSize(sf::Vector2f(squareSize, squareSize));
+									rect.setFillColor(sf::Color(r, g, b));
+									rect.setOutlineColor(foreColor);
+									rect.setOutlineThickness(1.0);
+									_p->visionWindow->draw(rect);
+									x += squareSize;
+								}
+								y += squareSize;
+							}
+						}
+					}
+				}
+
+				_p->visionWindow->display();
+			}
+		}
 	}
 }
 
