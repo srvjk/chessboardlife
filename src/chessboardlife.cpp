@@ -206,7 +206,20 @@ void NeighborhoodSensor::step()
 		_p->neighborhoodImage = std::make_shared<ChessboardTypes::Image>(3, 3);
 	}
 
-	chessboard->getImage(x - 1, y - 1, _p->neighborhoodImage.get());
+	//chessboard->getImage(x - 1, y - 1, _p->neighborhoodImage.get());
+
+	shared_ptr<ChessboardLifeViewer> viewer = nullptr;
+	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
+		auto ent = iter.value()->as<ChessboardLifeViewer>();
+		if (ent) {
+			viewer = ent;
+			break;
+		}
+	}
+	if (!viewer)
+		return;
+
+	viewer->getImage(x - 1, y - 1, _p->neighborhoodImage.get());
 }
 
 std::tuple<int, int> NeighborhoodSensor::getSize() const
@@ -444,23 +457,6 @@ std::shared_ptr<ChessboardTypes::Square> Chessboard::getSquare(int x, int y)
 		return _p->squares[index];
 
 	return nullptr;
-}
-
-void Chessboard::getImage(int x, int y, ChessboardTypes::Image* img)
-{
-	if (!img)
-		return;
-
-	for (int i = 0; i < img->height; ++i) {
-		for (int j = 0; j < img->width; ++j) {
-			int indx = i * img->width + j;
-			img->pixels[indx] = sf::Color(
-				Basis::System::randomInt(0, 255),
-				Basis::System::randomInt(0, 255),
-				Basis::System::randomInt(0, 255)
-			);
-		}
-	}
 }
 
 struct ChessboardLife::Private
@@ -925,6 +921,23 @@ void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame, floa
 
 		currentX += (itemWidth + margin);
 		//currentY += (itemHeight + margin);
+	}
+}
+
+void ChessboardLifeViewer::getImage(int x, int y, ChessboardTypes::Image* img)
+{
+	if (!img)
+		return;
+
+	for (int i = 0; i < img->height; ++i) {
+		for (int j = 0; j < img->width; ++j) {
+			int indx = i * img->width + j;
+			img->pixels[indx] = sf::Color(
+				Basis::System::randomInt(0, 255),
+				Basis::System::randomInt(0, 255),
+				Basis::System::randomInt(0, 255)
+			);
+		}
 	}
 }
 

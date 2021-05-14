@@ -134,7 +134,6 @@ public:
 	void create(int size);
 	int size() const;
 	std::shared_ptr<ChessboardTypes::Square> getSquare(int x, int y);
-	void getImage(int x, int y, ChessboardTypes::Image* img);
 
 private:
 	std::unique_ptr<Private> _p;
@@ -159,6 +158,7 @@ class MODULE_EXPORT ChessboardLifeViewer : public Basis::Entity
 public:
 	ChessboardLifeViewer(Basis::System* s);
 	void step();
+	void getImage(int x, int y, ChessboardTypes::Image* img);
 
 private:
 	void drawTimeFrame(std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
