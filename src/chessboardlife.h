@@ -158,10 +158,8 @@ class MODULE_EXPORT ChessboardLifeViewer : public Basis::Entity
 public:
 	ChessboardLifeViewer(Basis::System* s);
 	void step();
-	void getImage(int x, int y, ChessboardTypes::Image* img);
-
-private:
-	void drawTimeFrame(std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
+	/// Скопировать в img фрагмент изображения мира вокруг точки (x, y)
+	void getImage(int x, int y, ChessboardTypes::Image* dstImage);
 
 private:
 	std::unique_ptr<Private> _p;

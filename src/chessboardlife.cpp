@@ -522,15 +522,6 @@ void ChessboardLife::step()
 		agent->step();
 }
 
-struct ChessboardLifeViewer::Private
-{
-	std::unique_ptr<sf::RenderWindow> window = nullptr;
-	std::unique_ptr<sf::RenderWindow> visionWindow = nullptr;
-	sf::Font generalFont;
-	std::string activeAgentName = "Agent";
-	std::map<Basis::tid, sf::Color> entityColors;
-};
-
 sf::Color newColor(const std::map<Basis::tid, sf::Color>& colors)
 {
 	int numIter = 5;
@@ -563,51 +554,28 @@ sf::Color newColor(const std::map<Basis::tid, sf::Color>& colors)
 	return testColors[bestColorIndex];
 }
 
-ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
-	Basis::Entity(s),
-	_p(std::make_unique<Private>())
+struct ChessboardLifeViewer::Private
 {
-	auto exe = addFacet<Basis::Executable>();
-	if (exe)
-		exe->setStepFunction(std::bind(&ChessboardLifeViewer::step, this));
-}
+	std::unique_ptr<sf::RenderWindow> window = nullptr;
+	std::shared_ptr<sf::Texture> windowTexture = nullptr;
+	std::unique_ptr<sf::RenderWindow> visionWindow = nullptr;
+	sf::Font generalFont;
+	std::string activeAgentName = "Agent";
+	std::map<Basis::tid, sf::Color> entityColors;
 
-// Если размеры окна заданы в явном виде, создаём именно такое окно (это может быть полезно в процессе разработки).
-// Если размеры окна не заданы, переходим в полноэкранный режим.
-// В любом случае вычисляем размеры максимально возможной в данном режиме области, допускающей нужное форматное отношение,
-// и всё рисуем внутри этой области.
-void ChessboardLifeViewer::step()
+	void draw(sf::RenderWindow* wnd);
+	void drawTimeFrame(sf::RenderWindow* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
+};
+
+void ChessboardLifeViewer::Private::draw(sf::RenderWindow* wnd)
 {
-	if (!_p->window) {
-		_p->window = make_unique<sf::RenderWindow>(sf::VideoMode(1024, 768), "Chessboard Life");
-
-		//if (!_p->generalFont.loadFromFile("EurostileBQ-BoldExtended.otf")) {
-		//	cout << "could not load font" << endl;
-		//	// TODO здесь надо просто подгрузить другой шрифт, а не флудить в лог об ошибке
-		//}
-	}
-
-	if (!_p->window)
-		return;
-
-	shared_ptr<ChessboardLife> core = nullptr;
-	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
-		auto ent = iter.value()->as<ChessboardLife>();
-		if (ent) {
-			core = ent;
-			break;
-		}
-	}
-	if (!core)
-		return;
-
 	// вычисляем размер и положение области рисования, исходя из размеров окна и нужного форматного отношения:
 	double aspectRatio = 0.5625;
 	sf::Vector2f viewPos;
 	sf::Vector2f viewSize;
 	float textMargin = 5; // поля вокруг текста
 	{
-		sf::Vector2u actualSize = _p->window->getSize();
+		sf::Vector2u actualSize = wnd->getSize();
 
 		double desiredWidth = actualSize.y / aspectRatio;
 		if (desiredWidth <= actualSize.x) {
@@ -627,24 +595,8 @@ void ChessboardLifeViewer::step()
 		double viewAspectRatio = viewSize.y / viewSize.x;
 	}
 
-	if (_p->window->isOpen()) {
-		sf::Event event;
-		while (_p->window->pollEvent(event))
-		{
-			if (event.type == sf::Event::Closed)
-				_p->window->close();
-
-			switch (event.type) {
-			case sf::Event::Closed:
-				_p->window->close();
-				break;
-			case sf::Event::Resized:
-				_p->window->setView(sf::View(sf::FloatRect(0, 0, event.size.width, event.size.height)));
-				break;
-			}
-		}
-
-		_p->window->clear();
+	if (wnd->isOpen()) {
+		wnd->clear();
 
 		sf::RectangleShape outRect;
 		sf::FloatRect boardRect; // область "шахматной доски"
@@ -666,11 +618,13 @@ void ChessboardLifeViewer::step()
 			outRect.setFillColor(bkColor);
 			outRect.setOutlineColor(foreColor);
 			outRect.setOutlineThickness(1.0);
-			_p->window->draw(outRect);
+			wnd->draw(outRect);
 		}
 
+		Basis::System* sys = Basis::System::instance();
+
 		// "шахматная доска" и агенты
-		vector<shared_ptr<Entity>> ents = system()->findEntitiesByName(ChessboardName);
+		vector<shared_ptr<Entity>> ents = sys->findEntitiesByName(ChessboardName);
 		if (!ents.empty()) {
 			shared_ptr<Chessboard> board = static_pointer_cast<Chessboard>(ents[0]);
 			float boardRectSize = std::min(viewSize.x, viewSize.y);
@@ -692,9 +646,9 @@ void ChessboardLifeViewer::step()
 
 				rectangle.setFillColor(bkColor);
 				rectangle.setOutlineColor(foreColor);
-				_p->window->draw(rectangle);
+				wnd->draw(rectangle);
 
-				vector<shared_ptr<Entity>> ents = system()->findEntitiesByName(ChessboardName);
+				vector<shared_ptr<Entity>> ents = sys->findEntitiesByName(ChessboardName);
 				if (!ents.empty()) {
 					shared_ptr<Chessboard> board = static_pointer_cast<Chessboard>(ents[0]);
 					float y = boardRect.top;
@@ -707,7 +661,7 @@ void ChessboardLifeViewer::step()
 							rect.setFillColor(bkColor);
 							rect.setOutlineColor(foreColor);
 							rect.setOutlineThickness(1.0);
-							_p->window->draw(rect);
+							wnd->draw(rect);
 							x += squareSize;
 						}
 						y += squareSize;
@@ -720,7 +674,7 @@ void ChessboardLifeViewer::step()
 			// агенты
 			{
 
-				for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
+				for (auto iter = sys->entityIterator(); iter.hasMore(); iter.next()) {
 					auto agent = iter.value()->as<Agent>();
 					if (agent) {
 						sf::Color bkColor = sf::Color(200, 50, 50);
@@ -736,7 +690,7 @@ void ChessboardLifeViewer::step()
 						rect.setPosition(sf::Vector2f(x, y));
 						rect.setSize(sf::Vector2f(squareSize, squareSize));
 						rect.setFillColor(bkColor);
-						_p->window->draw(rect);
+						wnd->draw(rect);
 					}
 
 					auto stone = iter.value()->as<Stone>();
@@ -754,7 +708,7 @@ void ChessboardLifeViewer::step()
 						rect.setPosition(sf::Vector2f(x, y));
 						rect.setSize(sf::Vector2f(squareSize, squareSize));
 						rect.setFillColor(bkColor);
-						_p->window->draw(rect);
+						wnd->draw(rect);
 					}
 				}
 			}
@@ -762,7 +716,7 @@ void ChessboardLifeViewer::step()
 
 		// история
 		{
-			auto activeAgent = Basis::toSingle<Agent>(system()->findEntitiesByName(_p->activeAgentName));
+			auto activeAgent = Basis::toSingle<Agent>(sys->findEntitiesByName(activeAgentName));
 			if (activeAgent) {
 				sf::Color bkColor = sf::Color(60, 60, 60);
 				sf::Color foreColor = sf::Color(100, 100, 100);
@@ -779,7 +733,7 @@ void ChessboardLifeViewer::step()
 
 				rectangle.setFillColor(bkColor);
 				rectangle.setOutlineColor(foreColor);
-				_p->window->draw(rectangle);
+				wnd->draw(rectangle);
 			}
 
 			if (activeAgent) {
@@ -790,7 +744,7 @@ void ChessboardLifeViewer::step()
 					int64_t numFrames = histCont->size();
 					int64_t maxFrames = activeAgent->maxTimeFrames();
 					float margin = 2.0;
-					
+
 					float frameHeight = histRect.height / maxFrames - margin;
 					float currentY = histRect.top;
 
@@ -808,73 +762,73 @@ void ChessboardLifeViewer::step()
 
 						rectangle.setFillColor(bkColor);
 						rectangle.setOutlineColor(foreColor);
-						_p->window->draw(rectangle);
+						wnd->draw(rectangle);
 
 						currentY += (frameHeight + margin);
 
-						drawTimeFrame(*it, rect.left, rect.top, rect.width, rect.height);
+						drawTimeFrame(wnd, *it, rect.left, rect.top, rect.width, rect.height);
 					}
 				}
 			}
 		}
 
-		_p->window->display();
+		wnd->display();
 
-		// зрение
-		if (!_p->visionWindow) {
-			_p->visionWindow = make_unique<sf::RenderWindow>(sf::VideoMode(200, 200), "Vision");
-		}
+		//// зрение
+		//if (!_p->visionWindow) {
+		//	_p->visionWindow = make_unique<sf::RenderWindow>(sf::VideoMode(200, 200), "Vision");
+		//}
 
-		if (_p->visionWindow) {
-			if (_p->visionWindow->isOpen()) {
-				sf::Vector2u actualSize = _p->visionWindow->getSize();
+		//if (_p->visionWindow) {
+		//	if (_p->visionWindow->isOpen()) {
+		//		sf::Vector2u actualSize = _p->visionWindow->getSize();
 
-				// окрестности агента
-				{
-					auto activeAgent = Basis::toSingle<Agent>(system()->findEntitiesByName(_p->activeAgentName));
-					std::shared_ptr<NeighborhoodSensor> vision = nullptr;
-					if (activeAgent) {
-						vision = Basis::toSingle<NeighborhoodSensor>(activeAgent->findEntitiesByName(NeighborhoodSensorName));
-					}
+		//		// окрестности агента
+		//		{
+		//			auto activeAgent = Basis::toSingle<Agent>(system()->findEntitiesByName(_p->activeAgentName));
+		//			std::shared_ptr<NeighborhoodSensor> vision = nullptr;
+		//			if (activeAgent) {
+		//				vision = Basis::toSingle<NeighborhoodSensor>(activeAgent->findEntitiesByName(NeighborhoodSensorName));
+		//			}
 
-					if (vision) {
-						sf::Color bkColor = sf::Color(60, 60, 60);
-						sf::Color foreColor = sf::Color(100, 100, 100);
-						float margin = 5.0;
+		//			if (vision) {
+		//				sf::Color bkColor = sf::Color(60, 60, 60);
+		//				sf::Color foreColor = sf::Color(100, 100, 100);
+		//				float margin = 5.0;
 
-						auto [w, h] = vision->getSize();
-						if (w > 0 && h > 0) {
-							float cellSizeX = (float)actualSize.x / (float)w;
-							float cellSizeY = (float)actualSize.y / (float)h;
-							float squareSize = std::min(cellSizeX, cellSizeY);
+		//				auto [w, h] = vision->getSize();
+		//				if (w > 0 && h > 0) {
+		//					float cellSizeX = (float)actualSize.x / (float)w;
+		//					float cellSizeY = (float)actualSize.y / (float)h;
+		//					float squareSize = std::min(cellSizeX, cellSizeY);
 
-							float y = 0;
-							for (int row = 0; row < h; ++row) {
-								float x = 0;
-								for (int col = 0; col < w; ++col) {
-									auto [r, g, b] = vision->getPixel(col, row);
-									sf::RectangleShape rect;
-									rect.setPosition(sf::Vector2f(x, y));
-									rect.setSize(sf::Vector2f(squareSize, squareSize));
-									rect.setFillColor(sf::Color(r, g, b));
-									rect.setOutlineColor(foreColor);
-									rect.setOutlineThickness(1.0);
-									_p->visionWindow->draw(rect);
-									x += squareSize;
-								}
-								y += squareSize;
-							}
-						}
-					}
-				}
+		//					float y = 0;
+		//					for (int row = 0; row < h; ++row) {
+		//						float x = 0;
+		//						for (int col = 0; col < w; ++col) {
+		//							auto [r, g, b] = vision->getPixel(col, row);
+		//							sf::RectangleShape rect;
+		//							rect.setPosition(sf::Vector2f(x, y));
+		//							rect.setSize(sf::Vector2f(squareSize, squareSize));
+		//							rect.setFillColor(sf::Color(r, g, b));
+		//							rect.setOutlineColor(foreColor);
+		//							rect.setOutlineThickness(1.0);
+		//							_p->visionWindow->draw(rect);
+		//							x += squareSize;
+		//						}
+		//						y += squareSize;
+		//					}
+		//				}
+		//			}
+		//		}
 
-				_p->visionWindow->display();
-			}
-		}
+		//		_p->visionWindow->display();
+		//	}
+		//}
 	}
 }
 
-void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height)
+void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderWindow* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height)
 {
 	float margin = 2.0;
 	float itemWidth = 10.0;
@@ -902,13 +856,13 @@ void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame, floa
 
 		sf::Color color;
 		Basis::tid typeId = (*it)->typeId();
-		auto colorIter = _p->entityColors.find(typeId);
-		if (colorIter != _p->entityColors.end()) {
+		auto colorIter = entityColors.find(typeId);
+		if (colorIter != entityColors.end()) {
 			color = colorIter->second;
 		}
 		else {
-			color = newColor(_p->entityColors);
-			_p->entityColors.insert({ typeId, color });
+			color = newColor(entityColors);
+			entityColors.insert({ typeId, color });
 		}
 		rectangle.setFillColor(color);
 		rectangle.setOutlineColor(foreColor);
@@ -917,26 +871,115 @@ void ChessboardLifeViewer::drawTimeFrame(std::shared_ptr<Entity> timeFrame, floa
 			rectangle.setFillColor(collisionColor);
 		}
 
-		_p->window->draw(rectangle);
+		wnd->draw(rectangle);
 
 		currentX += (itemWidth + margin);
 		//currentY += (itemHeight + margin);
 	}
 }
 
-void ChessboardLifeViewer::getImage(int x, int y, ChessboardTypes::Image* img)
+ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
+	Basis::Entity(s),
+	_p(std::make_unique<Private>())
 {
-	if (!img)
+	auto exe = addFacet<Basis::Executable>();
+	if (exe)
+		exe->setStepFunction(std::bind(&ChessboardLifeViewer::step, this));
+}
+
+// Если размеры окна заданы в явном виде, создаём именно такое окно (это может быть полезно в процессе разработки).
+// Если размеры окна не заданы, переходим в полноэкранный режим.
+// В любом случае вычисляем размеры максимально возможной в данном режиме области, допускающей нужное форматное отношение,
+// и всё рисуем внутри этой области.
+void ChessboardLifeViewer::step()
+{
+	if (!_p->window) {
+		_p->window = make_unique<sf::RenderWindow>(sf::VideoMode(1024, 768), "Chessboard Life");
+		sf::View view(sf::Vector2f(0, 0), sf::Vector2f(1024, 768));
+
+		//if (!_p->generalFont.loadFromFile("EurostileBQ-BoldExtended.otf")) {
+		//	cout << "could not load font" << endl;
+		//	// TODO здесь надо просто подгрузить другой шрифт, а не флудить в лог об ошибке
+		//}
+	}
+
+	if (!_p->window)
 		return;
 
-	for (int i = 0; i < img->height; ++i) {
-		for (int j = 0; j < img->width; ++j) {
-			int indx = i * img->width + j;
-			img->pixels[indx] = sf::Color(
-				Basis::System::randomInt(0, 255),
-				Basis::System::randomInt(0, 255),
-				Basis::System::randomInt(0, 255)
-			);
+	shared_ptr<ChessboardLife> core = nullptr;
+	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
+		auto ent = iter.value()->as<ChessboardLife>();
+		if (ent) {
+			core = ent;
+			break;
+		}
+	}
+	if (!core)
+		return;
+
+	if (_p->window->isOpen()) {
+		sf::Event event;
+		while (_p->window->pollEvent(event))
+		{
+			if (event.type == sf::Event::Closed)
+				_p->window->close();
+
+			switch (event.type) {
+			case sf::Event::Closed:
+				_p->window->close();
+				break;
+			case sf::Event::Resized:
+				_p->window->setView(sf::View(sf::FloatRect(0, 0, event.size.width, event.size.height)));
+				break;
+			}
+		}
+	}
+
+	_p->draw(_p->window.get());
+
+}
+
+void ChessboardLifeViewer::getImage(int x, int y, ChessboardTypes::Image* dstImage)
+{
+	if (!_p->window)
+		return;
+	if (!dstImage)
+		return;
+
+	if (!_p->windowTexture) {
+		_p->windowTexture = make_shared<sf::Texture>();
+	}
+	if (!_p->windowTexture)
+		return;
+
+	sf::Vector2u texSize = _p->windowTexture->getSize();
+	sf::Vector2u winSize = _p->window->getSize();
+	if (texSize.x != winSize.x || texSize.y != winSize.y) {
+		if (!_p->windowTexture->create(winSize.x, winSize.y))
+			return;
+	}
+
+	_p->windowTexture->update(*_p->window);
+	sf::Image tempImage = _p->windowTexture->copyToImage();
+	const sf::Uint8* pixelsPtr = tempImage.getPixelsPtr();
+
+	// левая верхняя точка копируемого региона
+	int x0 = x - dstImage->width / 2;
+	int y0 = y - dstImage->height / 2;
+
+	for (int i = 0; i < dstImage->height; ++i) {
+		int srcY = y0 + i;
+		if (srcY >= 0 && srcY < winSize.y) {
+			int srcRowPtr = srcY * winSize.x;
+			for (int j = 0; j < dstImage->width; ++j) {
+				int srcX = x0 + j;
+				if (srcX >= 0 && srcX < winSize.x) {
+					int srcPixelIndex = srcRowPtr + srcX;
+					int srcByteIndex = srcPixelIndex * 4;
+					int dstPixelIndex = i * dstImage->width + j;
+					dstImage->pixels[dstPixelIndex] = sf::Color(*(sf::Uint32*)(pixelsPtr + srcByteIndex));
+				}
+			}
 		}
 	}
 }
