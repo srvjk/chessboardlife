@@ -133,6 +133,11 @@ public:
 	Chessboard(Basis::System* s);
 	void create(int size);
 	int size() const;
+	float squareSize() const;
+	void setTopLeft(float top, float left);
+	float top() const;
+	float left() const;
+	/// ѕолучить квадрат дл€ пол€ с координатами (x, y)
 	std::shared_ptr<ChessboardTypes::Square> getSquare(int x, int y);
 
 private:

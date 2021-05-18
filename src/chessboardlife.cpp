@@ -422,6 +422,8 @@ Stone::Stone(Basis::System* s) :
 struct Chessboard::Private 
 {
 	int size = 0;
+	float squareSize = 10;
+	sf::Vector2f topLeft;
 	vector<std::shared_ptr<ChessboardTypes::Square>> squares;
 };
 
@@ -439,6 +441,10 @@ void Chessboard::create(int size)
 			auto square = std::make_shared<ChessboardTypes::Square>();
 			square->x = x;
 			square->y = y;
+			square->left = x * _p->squareSize;
+			square->top = y * _p->squareSize;
+			square->width = _p->squareSize;
+			square->height = _p->squareSize;
 
 			_p->squares.push_back(square);
 		}
@@ -448,6 +454,26 @@ void Chessboard::create(int size)
 int Chessboard::size() const
 {
 	return _p->size;
+}
+
+float Chessboard::squareSize() const
+{
+	return _p->squareSize;
+}
+
+void Chessboard::setTopLeft(float top, float left)
+{
+	_p->topLeft = sf::Vector2f(left, top);
+}
+
+float Chessboard::top() const
+{
+	return _p->topLeft.y;
+}
+
+float Chessboard::left() const
+{
+	return _p->topLeft.x;
 }
 
 std::shared_ptr<ChessboardTypes::Square> Chessboard::getSquare(int x, int y)
@@ -563,11 +589,12 @@ struct ChessboardLifeViewer::Private
 	std::string activeAgentName = "Agent";
 	std::map<Basis::tid, sf::Color> entityColors;
 
-	void draw(sf::RenderWindow* wnd);
-	void drawTimeFrame(sf::RenderWindow* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
+	void draw(sf::RenderTarget* wnd);
+	void drawTimeFrame(sf::RenderTarget* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
+	void drawVisualField(sf::RenderTarget* tgt);
 };
 
-void ChessboardLifeViewer::Private::draw(sf::RenderWindow* wnd)
+void ChessboardLifeViewer::Private::draw(sf::RenderTarget* wnd)
 {
 	// вычисляем размер и положение области рисования, исходя из размеров окна и нужного форматного отношения:
 	double aspectRatio = 0.5625;
@@ -595,245 +622,188 @@ void ChessboardLifeViewer::Private::draw(sf::RenderWindow* wnd)
 		double viewAspectRatio = viewSize.y / viewSize.x;
 	}
 
-	if (wnd->isOpen()) {
-		wnd->clear();
+	wnd->clear();
 
-		sf::RectangleShape outRect;
-		sf::FloatRect boardRect; // область "шахматной доски"
-		sf::FloatRect histRect; // область "истории"
-		sf::FloatRect visionRect; // область "зрения" агента
-		int visionRectSize = 20;
+	sf::RectangleShape outRect;
+	sf::FloatRect boardRect; // область "шахматной доски"
+	sf::FloatRect histRect; // область "истории"
+	sf::FloatRect visionRect; // область "зрения" агента
+	int visionRectSize = 20;
 
-		// рисуем границы области отображения
+	// рисуем границы области отображения
+	{
+		sf::Color bkColor = sf::Color(50, 50, 50);
+		sf::Color foreColor = sf::Color(100, 100, 100);
+
+		outRect.setPosition(viewPos);
+		outRect.setSize(viewSize);
+
+		sf::Vector2f actPos = outRect.getPosition();
+		sf::Vector2f actSize = outRect.getSize();
+
+		outRect.setFillColor(bkColor);
+		outRect.setOutlineColor(foreColor);
+		outRect.setOutlineThickness(1.0);
+		wnd->draw(outRect);
+	}
+
+	Basis::System* sys = Basis::System::instance();
+
+	// "шахматная доска" и агенты
+	vector<shared_ptr<Entity>> ents = sys->findEntitiesByName(ChessboardName);
+	if (!ents.empty()) {
+		shared_ptr<Chessboard> board = static_pointer_cast<Chessboard>(ents[0]);
+		//float boardRectSize = std::min(viewSize.x, viewSize.y);
+		//int boardSize = board->size();
+		float squareSize = board->squareSize();
+		float boardRectSize = squareSize * board->size();
+
 		{
-			sf::Color bkColor = sf::Color(50, 50, 50);
+			sf::Color bkColor = sf::Color(30, 30, 30);
 			sf::Color foreColor = sf::Color(100, 100, 100);
 
-			outRect.setPosition(viewPos);
-			outRect.setSize(viewSize);
+			boardRect.left = viewPos.x;
+			boardRect.top = viewPos.y;
+			boardRect.width = boardRectSize;
+			boardRect.height = boardRectSize;
+			board->setTopLeft(boardRect.top, boardRect.left);
 
-			sf::Vector2f actPos = outRect.getPosition();
-			sf::Vector2f actSize = outRect.getSize();
+			sf::RectangleShape rectangle;
+			rectangle.setPosition(sf::Vector2f(boardRect.left, boardRect.top));
+			rectangle.setSize(sf::Vector2f(boardRect.width, boardRect.height));
 
-			outRect.setFillColor(bkColor);
-			outRect.setOutlineColor(foreColor);
-			outRect.setOutlineThickness(1.0);
-			wnd->draw(outRect);
-		}
+			rectangle.setFillColor(bkColor);
+			rectangle.setOutlineColor(foreColor);
+			wnd->draw(rectangle);
 
-		Basis::System* sys = Basis::System::instance();
-
-		// "шахматная доска" и агенты
-		vector<shared_ptr<Entity>> ents = sys->findEntitiesByName(ChessboardName);
-		if (!ents.empty()) {
-			shared_ptr<Chessboard> board = static_pointer_cast<Chessboard>(ents[0]);
-			float boardRectSize = std::min(viewSize.x, viewSize.y);
-			int boardSize = board->size();
-			float squareSize = boardRectSize / boardSize;
-
-			{
-				sf::Color bkColor = sf::Color(30, 30, 30);
-				sf::Color foreColor = sf::Color(100, 100, 100);
-
-				boardRect.left = viewPos.x;
-				boardRect.top = viewPos.y;
-				boardRect.width = boardRectSize;
-				boardRect.height = boardRectSize;
-
-				sf::RectangleShape rectangle;
-				rectangle.setPosition(sf::Vector2f(boardRect.left, boardRect.top));
-				rectangle.setSize(sf::Vector2f(boardRect.width, boardRect.height));
-
-				rectangle.setFillColor(bkColor);
-				rectangle.setOutlineColor(foreColor);
-				wnd->draw(rectangle);
-
-				vector<shared_ptr<Entity>> ents = sys->findEntitiesByName(ChessboardName);
-				if (!ents.empty()) {
-					shared_ptr<Chessboard> board = static_pointer_cast<Chessboard>(ents[0]);
-					float y = boardRect.top;
-					for (int row = 0; row < boardSize; ++row) {
-						float x = boardRect.left;
-						for (int col = 0; col < boardSize; ++col) {
-							sf::RectangleShape rect;
-							rect.setPosition(sf::Vector2f(x, y));
-							rect.setSize(sf::Vector2f(squareSize, squareSize));
-							rect.setFillColor(bkColor);
-							rect.setOutlineColor(foreColor);
-							rect.setOutlineThickness(1.0);
-							wnd->draw(rect);
-							x += squareSize;
-						}
-						y += squareSize;
-					}
-				}
-
-				//_p->window->draw(text);
-			}
-
-			// агенты
-			{
-
-				for (auto iter = sys->entityIterator(); iter.hasMore(); iter.next()) {
-					auto agent = iter.value()->as<Agent>();
-					if (agent) {
-						sf::Color bkColor = sf::Color(200, 50, 50);
-						sf::Color foreColor = sf::Color(100, 100, 100);
+			vector<shared_ptr<Entity>> ents = sys->findEntitiesByName(ChessboardName);
+			if (!ents.empty()) {
+				shared_ptr<Chessboard> board = static_pointer_cast<Chessboard>(ents[0]);
+				float y = boardRect.top;
+				for (int row = 0; row < board->size(); ++row) {
+					float x = boardRect.left;
+					for (int col = 0; col < board->size(); ++col) {
 						sf::RectangleShape rect;
-
-						auto spt = agent->as<Basis::Spatial>();
-						std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
-
-						float x = boardRect.left + square->x * squareSize;
-						float y = boardRect.top + square->y * squareSize;
-
 						rect.setPosition(sf::Vector2f(x, y));
 						rect.setSize(sf::Vector2f(squareSize, squareSize));
 						rect.setFillColor(bkColor);
+						rect.setOutlineColor(foreColor);
+						rect.setOutlineThickness(1.0);
 						wnd->draw(rect);
+						x += squareSize;
 					}
-
-					auto stone = iter.value()->as<Stone>();
-					if (stone) {
-						sf::Color bkColor = sf::Color(70, 70, 70);
-						sf::Color foreColor = sf::Color(70, 70, 70);
-
-						auto spt = stone->as<Basis::Spatial>();
-						std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
-
-						float x = boardRect.left + square->x * squareSize;
-						float y = boardRect.top + square->y * squareSize;
-						sf::RectangleShape rect;
-
-						rect.setPosition(sf::Vector2f(x, y));
-						rect.setSize(sf::Vector2f(squareSize, squareSize));
-						rect.setFillColor(bkColor);
-						wnd->draw(rect);
-					}
+					y += squareSize;
 				}
 			}
 		}
 
-		// история
+		// агенты
 		{
-			auto activeAgent = Basis::toSingle<Agent>(sys->findEntitiesByName(activeAgentName));
-			if (activeAgent) {
-				sf::Color bkColor = sf::Color(60, 60, 60);
-				sf::Color foreColor = sf::Color(100, 100, 100);
-				float margin = 5.0;
 
-				histRect.left = boardRect.left + boardRect.width + margin;
-				histRect.top = boardRect.top;
-				histRect.width = viewSize.x - boardRect.width - 2 * margin;
-				histRect.height = boardRect.height;
+			for (auto iter = sys->entityIterator(); iter.hasMore(); iter.next()) {
+				auto agent = iter.value()->as<Agent>();
+				if (agent) {
+					sf::Color bkColor = sf::Color(200, 50, 50);
+					sf::Color foreColor = sf::Color(100, 100, 100);
+					sf::RectangleShape rect;
 
-				sf::RectangleShape rectangle;
-				rectangle.setPosition(sf::Vector2f(histRect.left, histRect.top));
-				rectangle.setSize(sf::Vector2f(histRect.width, histRect.height));
+					auto spt = agent->as<Basis::Spatial>();
+					std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
 
-				rectangle.setFillColor(bkColor);
-				rectangle.setOutlineColor(foreColor);
-				wnd->draw(rectangle);
-			}
+					float x = boardRect.left + square->x * squareSize;
+					float y = boardRect.top + square->y * squareSize;
 
-			if (activeAgent) {
-				auto histCont = Basis::toSingle<Basis::Container>(activeAgent->findEntitiesByName("History"));
-				if (histCont) {
-					sf::Color bkColor = sf::Color(20, 20, 20);
-					sf::Color foreColor = sf::Color(200, 200, 200);
-					int64_t numFrames = histCont->size();
-					int64_t maxFrames = activeAgent->maxTimeFrames();
-					float margin = 2.0;
+					rect.setPosition(sf::Vector2f(x, y));
+					rect.setSize(sf::Vector2f(squareSize, squareSize));
+					rect.setFillColor(bkColor);
+					wnd->draw(rect);
+				}
 
-					float frameHeight = histRect.height / maxFrames - margin;
-					float currentY = histRect.top;
+				auto stone = iter.value()->as<Stone>();
+				if (stone) {
+					sf::Color bkColor = sf::Color(70, 70, 70);
+					sf::Color foreColor = sf::Color(70, 70, 70);
 
-					auto items = histCont->items();
-					for (auto it = items.cbegin(); it != items.cend(); ++it) {
-						sf::FloatRect rect;
-						rect.left = histRect.left;
-						rect.top = currentY;
-						rect.width = histRect.width;
-						rect.height = frameHeight;
+					auto spt = stone->as<Basis::Spatial>();
+					std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
 
-						sf::RectangleShape rectangle;
-						rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
-						rectangle.setSize(sf::Vector2f(rect.width, rect.height));
+					float x = boardRect.left + square->x * squareSize;
+					float y = boardRect.top + square->y * squareSize;
+					sf::RectangleShape rect;
 
-						rectangle.setFillColor(bkColor);
-						rectangle.setOutlineColor(foreColor);
-						wnd->draw(rectangle);
-
-						currentY += (frameHeight + margin);
-
-						drawTimeFrame(wnd, *it, rect.left, rect.top, rect.width, rect.height);
-					}
+					rect.setPosition(sf::Vector2f(x, y));
+					rect.setSize(sf::Vector2f(squareSize, squareSize));
+					rect.setFillColor(bkColor);
+					wnd->draw(rect);
 				}
 			}
 		}
+	}
 
-		wnd->display();
+	// история
+	{
+		auto activeAgent = Basis::toSingle<Agent>(sys->findEntitiesByName(activeAgentName));
+		if (activeAgent) {
+			sf::Color bkColor = sf::Color(60, 60, 60);
+			sf::Color foreColor = sf::Color(100, 100, 100);
+			float margin = 5.0;
 
-		//// зрение
-		//if (!_p->visionWindow) {
-		//	_p->visionWindow = make_unique<sf::RenderWindow>(sf::VideoMode(200, 200), "Vision");
-		//}
+			histRect.left = boardRect.left + boardRect.width + margin;
+			histRect.top = boardRect.top;
+			histRect.width = viewSize.x - boardRect.width - 2 * margin;
+			histRect.height = boardRect.height;
 
-		//if (_p->visionWindow) {
-		//	if (_p->visionWindow->isOpen()) {
-		//		sf::Vector2u actualSize = _p->visionWindow->getSize();
+			sf::RectangleShape rectangle;
+			rectangle.setPosition(sf::Vector2f(histRect.left, histRect.top));
+			rectangle.setSize(sf::Vector2f(histRect.width, histRect.height));
 
-		//		// окрестности агента
-		//		{
-		//			auto activeAgent = Basis::toSingle<Agent>(system()->findEntitiesByName(_p->activeAgentName));
-		//			std::shared_ptr<NeighborhoodSensor> vision = nullptr;
-		//			if (activeAgent) {
-		//				vision = Basis::toSingle<NeighborhoodSensor>(activeAgent->findEntitiesByName(NeighborhoodSensorName));
-		//			}
+			rectangle.setFillColor(bkColor);
+			rectangle.setOutlineColor(foreColor);
+			wnd->draw(rectangle);
+		}
 
-		//			if (vision) {
-		//				sf::Color bkColor = sf::Color(60, 60, 60);
-		//				sf::Color foreColor = sf::Color(100, 100, 100);
-		//				float margin = 5.0;
+		if (activeAgent) {
+			auto histCont = Basis::toSingle<Basis::Container>(activeAgent->findEntitiesByName("History"));
+			if (histCont) {
+				sf::Color bkColor = sf::Color(20, 20, 20);
+				sf::Color foreColor = sf::Color(200, 200, 200);
+				int64_t numFrames = histCont->size();
+				int64_t maxFrames = activeAgent->maxTimeFrames();
+				float margin = 2.0;
 
-		//				auto [w, h] = vision->getSize();
-		//				if (w > 0 && h > 0) {
-		//					float cellSizeX = (float)actualSize.x / (float)w;
-		//					float cellSizeY = (float)actualSize.y / (float)h;
-		//					float squareSize = std::min(cellSizeX, cellSizeY);
+				float frameHeight = histRect.height / maxFrames - margin;
+				float currentY = histRect.top;
 
-		//					float y = 0;
-		//					for (int row = 0; row < h; ++row) {
-		//						float x = 0;
-		//						for (int col = 0; col < w; ++col) {
-		//							auto [r, g, b] = vision->getPixel(col, row);
-		//							sf::RectangleShape rect;
-		//							rect.setPosition(sf::Vector2f(x, y));
-		//							rect.setSize(sf::Vector2f(squareSize, squareSize));
-		//							rect.setFillColor(sf::Color(r, g, b));
-		//							rect.setOutlineColor(foreColor);
-		//							rect.setOutlineThickness(1.0);
-		//							_p->visionWindow->draw(rect);
-		//							x += squareSize;
-		//						}
-		//						y += squareSize;
-		//					}
-		//				}
-		//			}
-		//		}
+				auto items = histCont->items();
+				for (auto it = items.cbegin(); it != items.cend(); ++it) {
+					sf::FloatRect rect;
+					rect.left = histRect.left;
+					rect.top = currentY;
+					rect.width = histRect.width;
+					rect.height = frameHeight;
 
-		//		_p->visionWindow->display();
-		//	}
-		//}
+					sf::RectangleShape rectangle;
+					rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
+					rectangle.setSize(sf::Vector2f(rect.width, rect.height));
+
+					rectangle.setFillColor(bkColor);
+					rectangle.setOutlineColor(foreColor);
+					wnd->draw(rectangle);
+
+					currentY += (frameHeight + margin);
+
+					drawTimeFrame(wnd, *it, rect.left, rect.top, rect.width, rect.height);
+				}
+			}
+		}
 	}
 }
 
-void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderWindow* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height)
+void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderTarget* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height)
 {
 	float margin = 2.0;
 	float itemWidth = 10.0;
 	float itemHeight = 10.0;
-	//sf::Color bkColor = sf::Color(200, 200, 20);
 	sf::Color collisionColor = sf::Color(255, 50, 50);
 	sf::Color foreColor = sf::Color(200, 200, 200);
 
@@ -851,8 +821,6 @@ void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderWindow* wnd, std::sh
 		sf::RectangleShape rectangle;
 		rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
 		rectangle.setSize(sf::Vector2f(rect.width, rect.height));
-
-		//rectangle.setFillColor(bkColor);
 
 		sf::Color color;
 		Basis::tid typeId = (*it)->typeId();
@@ -874,8 +842,28 @@ void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderWindow* wnd, std::sh
 		wnd->draw(rectangle);
 
 		currentX += (itemWidth + margin);
-		//currentY += (itemHeight + margin);
 	}
+}
+
+void ChessboardLifeViewer::Private::drawVisualField(sf::RenderTarget* tgt)
+{
+	auto activeAgent = Basis::toSingle<Agent>(Basis::System::instance()->findEntitiesByName(activeAgentName));
+	if (!activeAgent)
+		return;
+
+	auto chessboard = Basis::toSingle<Chessboard>(Basis::System::instance()->findEntitiesByName(ChessboardName));
+	if (!chessboard)
+		return;
+
+	auto spt = activeAgent->as<Basis::Spatial>();
+	auto square = chessboard->getSquare(spt->position().get<0>(), spt->position().get<1>());
+
+	sf::View view;// (sf::Vector2f(100.0, 100.0), sf::Vector2f(100.0f, 100.0f));
+	view.setCenter(chessboard->left() + square->left + square->width / 2.0, chessboard->top() + square->top + square->height / 2.0);
+	view.setSize(square->width * 5, square->height * 5);
+	tgt->setView(view);
+
+	draw(tgt);
 }
 
 ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
@@ -933,10 +921,22 @@ void ChessboardLifeViewer::step()
 				break;
 			}
 		}
+
+		_p->draw(_p->window.get());
+		_p->window->display();
 	}
 
-	_p->draw(_p->window.get());
+	// зрение
+	if (!_p->visionWindow) {
+		_p->visionWindow = make_unique<sf::RenderWindow>(sf::VideoMode(200, 200), "Vision");
+	}
 
+	if (_p->visionWindow) {
+		if (_p->visionWindow->isOpen()) {
+			_p->drawVisualField(_p->visionWindow.get());
+			_p->visionWindow->display();
+		}
+	}
 }
 
 void ChessboardLifeViewer::getImage(int x, int y, ChessboardTypes::Image* dstImage)
