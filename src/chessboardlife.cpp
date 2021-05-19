@@ -585,86 +585,39 @@ struct ChessboardLifeViewer::Private
 	std::unique_ptr<sf::RenderWindow> window = nullptr;
 	std::shared_ptr<sf::Texture> windowTexture = nullptr;
 	std::unique_ptr<sf::RenderWindow> visionWindow = nullptr;
+	std::unique_ptr<sf::RenderWindow> historyWindow = nullptr;
 	sf::Font generalFont;
 	std::string activeAgentName = "Agent";
 	std::map<Basis::tid, sf::Color> entityColors;
 
-	void drawChessboard(sf::RenderTarget* wnd, const sf::FloatRect& rect);
-	void drawHistory(sf::RenderTarget* tgt, const sf::FloatRect& rect);
-	void drawTimeFrame(sf::RenderTarget* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
+	void drawChessboard(sf::RenderTarget* tgt);
+	void drawHistory(sf::RenderTarget* tgt);
+	void drawTimeFrame(sf::RenderTarget* tgt, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
 	void drawVisualField(sf::RenderTarget* tgt);
 };
 
-void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* wnd, const sf::FloatRect& rect)
+void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* tgt)
 {
-	// вычисляем размер и положение области рисования, исходя из размеров окна и нужного форматного отношения:
-	//double aspectRatio = 0.5625;
-	//sf::Vector2f viewPos;
-	//sf::Vector2f viewSize;
-	//float textMargin = 5; // поля вокруг текста
-	//{
-	//	sf::Vector2u actualSize = wnd->getSize();
-
-	//	double desiredWidth = actualSize.y / aspectRatio;
-	//	if (desiredWidth <= actualSize.x) {
-	//		viewSize.x = desiredWidth;
-	//		viewSize.y = actualSize.y;
-	//	}
-	//	else {
-	//		viewSize.x = actualSize.x;
-	//		viewSize.y = viewSize.x * aspectRatio;
-	//	}
-
-	//	double dx = actualSize.x - viewSize.x;
-	//	double dy = actualSize.y - viewSize.y;
-	//	viewPos.x = dx / 2.0;
-	//	viewPos.y = dy / 2.0;
-
-	//	double viewAspectRatio = viewSize.y / viewSize.x;
-	//}
-
-	wnd->clear();
+	tgt->clear();
 
 	sf::RectangleShape outRect;
 	sf::FloatRect boardRect; // область "шахматной доски"
-	sf::FloatRect histRect; // область "истории"
-	sf::FloatRect visionRect; // область "зрения" агента
-	int visionRectSize = 20;
-
-	// рисуем границы области отображения
-	{
-		sf::Color bkColor = sf::Color(50, 50, 50);
-		sf::Color foreColor = sf::Color(100, 100, 100);
-
-		outRect.setPosition(rect.getPosition());
-		outRect.setSize(rect.getSize());
-
-		sf::Vector2f actPos = outRect.getPosition();
-		sf::Vector2f actSize = outRect.getSize();
-
-		outRect.setFillColor(bkColor);
-		outRect.setOutlineColor(foreColor);
-		outRect.setOutlineThickness(1.0);
-		wnd->draw(outRect);
-	}
 
 	Basis::System* sys = Basis::System::instance();
 
-	// "шахматная доска" и агенты
 	vector<shared_ptr<Entity>> ents = sys->findEntitiesByName(ChessboardName);
 	if (!ents.empty()) {
 		shared_ptr<Chessboard> board = static_pointer_cast<Chessboard>(ents[0]);
-		//float boardRectSize = std::min(viewSize.x, viewSize.y);
-		//int boardSize = board->size();
 		float squareSize = board->squareSize();
 		float boardRectSize = squareSize * board->size();
 
+		// "шахматная доска"
 		{
 			sf::Color bkColor = sf::Color(30, 30, 30);
 			sf::Color foreColor = sf::Color(100, 100, 100);
 
-			boardRect.left = rect.left;
-			boardRect.top = rect.top;
+			boardRect.left = 0;
+			boardRect.top = 0;
 			boardRect.width = boardRectSize;
 			boardRect.height = boardRectSize;
 			board->setTopLeft(boardRect.top, boardRect.left);
@@ -675,7 +628,7 @@ void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* wnd, const 
 
 			rectangle.setFillColor(bkColor);
 			rectangle.setOutlineColor(foreColor);
-			wnd->draw(rectangle);
+			tgt->draw(rectangle);
 
 			vector<shared_ptr<Entity>> ents = sys->findEntitiesByName(ChessboardName);
 			if (!ents.empty()) {
@@ -690,7 +643,7 @@ void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* wnd, const 
 						rectShape.setFillColor(bkColor);
 						rectShape.setOutlineColor(foreColor);
 						rectShape.setOutlineThickness(1.0);
-						wnd->draw(rectShape);
+						tgt->draw(rectShape);
 						x += squareSize;
 					}
 					y += squareSize;
@@ -715,9 +668,9 @@ void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* wnd, const 
 					float y = boardRect.top + square->y * squareSize;
 
 					rectShape.setPosition(sf::Vector2f(x, y));
-					rectShape.setSize(sf::Vector2f(squareSize, squareSize));
+					rectShape.setSize(sf::Vector2f(squareSize - 1, squareSize - 1));
 					rectShape.setFillColor(bkColor);
-					wnd->draw(rectShape);
+					tgt->draw(rectShape);
 				}
 
 				auto stone = iter.value()->as<Stone>();
@@ -733,18 +686,20 @@ void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* wnd, const 
 					sf::RectangleShape rectShape;
 
 					rectShape.setPosition(sf::Vector2f(x, y));
-					rectShape.setSize(sf::Vector2f(squareSize, squareSize));
+					rectShape.setSize(sf::Vector2f(squareSize - 1, squareSize - 1));
 					rectShape.setFillColor(bkColor);
-					wnd->draw(rectShape);
+					tgt->draw(rectShape);
 				}
 			}
 		}
 	}
 }
 
-void ChessboardLifeViewer::Private::drawHistory(sf::RenderTarget* tgt, const sf::FloatRect& rect)
+void ChessboardLifeViewer::Private::drawHistory(sf::RenderTarget* tgt)
 {
 	tgt->clear();
+
+	sf::Vector2u size = tgt->getSize();
 
 	auto activeAgent = Basis::toSingle<Agent>(Basis::System::instance()->findEntitiesByName(activeAgentName));
 	if (activeAgent) {
@@ -753,8 +708,8 @@ void ChessboardLifeViewer::Private::drawHistory(sf::RenderTarget* tgt, const sf:
 		float margin = 5.0;
 
 		sf::RectangleShape rectangle;
-		rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
-		rectangle.setSize(sf::Vector2f(rect.width, rect.height));
+		//rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
+		rectangle.setSize(sf::Vector2f(size.x, size.y));
 
 		rectangle.setFillColor(bkColor);
 		rectangle.setOutlineColor(foreColor);
@@ -770,15 +725,15 @@ void ChessboardLifeViewer::Private::drawHistory(sf::RenderTarget* tgt, const sf:
 			int64_t maxFrames = activeAgent->maxTimeFrames();
 			float margin = 2.0;
 
-			float frameHeight = rect.height / maxFrames - margin;
-			float currentY = rect.top;
+			float frameHeight = (float)size.y / maxFrames - margin;
+			float currentY = 0;
 
 			auto items = histCont->items();
 			for (auto it = items.cbegin(); it != items.cend(); ++it) {
 				sf::FloatRect itemRect;
-				itemRect.left = rect.left;
+				itemRect.left = 0;
 				itemRect.top = currentY;
-				itemRect.width = rect.width;
+				itemRect.width = size.x;
 				itemRect.height = frameHeight;
 
 				sf::RectangleShape rectangle;
@@ -791,13 +746,13 @@ void ChessboardLifeViewer::Private::drawHistory(sf::RenderTarget* tgt, const sf:
 
 				currentY += (frameHeight + margin);
 
-				drawTimeFrame(tgt, *it, rect.left, rect.top, rect.width, rect.height);
+				drawTimeFrame(tgt, *it, itemRect.left, itemRect.top, itemRect.width, itemRect.height);
 			}
 		}
 	}
 }
 
-void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderTarget* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height)
+void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderTarget* tgt, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height)
 {
 	float margin = 2.0;
 	float itemWidth = 10.0;
@@ -837,7 +792,7 @@ void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderTarget* wnd, std::sh
 			rectangle.setFillColor(collisionColor);
 		}
 
-		wnd->draw(rectangle);
+		tgt->draw(rectangle);
 
 		currentX += (itemWidth + margin);
 	}
@@ -856,13 +811,12 @@ void ChessboardLifeViewer::Private::drawVisualField(sf::RenderTarget* tgt)
 	auto spt = activeAgent->as<Basis::Spatial>();
 	auto square = chessboard->getSquare(spt->position().get<0>(), spt->position().get<1>());
 
-	sf::View view;// (sf::Vector2f(100.0, 100.0), sf::Vector2f(100.0f, 100.0f));
+	sf::View view;
 	view.setCenter(chessboard->left() + square->left + square->width / 2.0, chessboard->top() + square->top + square->height / 2.0);
 	view.setSize(square->width * 5, square->height * 5);
 	tgt->setView(view);
 
-	sf::Vector2u size = tgt->getSize();
-	drawChessboard(tgt, sf::FloatRect(0, 0, size.x, size.y));
+	drawChessboard(tgt);
 }
 
 ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
@@ -931,17 +885,15 @@ void ChessboardLifeViewer::step()
 		auto chessboard = Basis::toSingle<Chessboard>(Basis::System::instance()->findEntitiesByName(ChessboardName));
 
 		sf::View view;
-		//view.setViewport(sf::FloatRect(left, top, minSize, minSize));
 		float boardSize = chessboard->size() * chessboard->squareSize();
-		view.reset(sf::FloatRect(0, 0, boardSize, boardSize));
-		float rx = (float)minSize / (float)winSize.x;
-		float ry = (float)minSize / (float)winSize.y;
+		view.reset(sf::FloatRect(0, 0, boardSize, boardSize)); // что будем выводить
+		float rx = (float)minSize / (float)winSize.x; // во сколько раз увеличить по горизонтали
+		float ry = (float)minSize / (float)winSize.y; // во сколько раз увеличить по вертикали
+		// вьюпорт - область, куда будем выводить, но заданная в долях от размера окна (!):
 		view.setViewport(sf::FloatRect((float)left / (float)winSize.x, (float)top / (float)winSize.y, rx, ry));
-		//view.setSize(minSize, minSize);
 		wnd->setView(view);
 
-		//_p->drawChessboard(wnd, sf::FloatRect(left, top, minSize, minSize));
-		_p->drawChessboard(wnd, sf::FloatRect(0, 0, minSize, minSize));
+		_p->drawChessboard(wnd);
 		_p->window->display();
 	}
 
@@ -954,6 +906,18 @@ void ChessboardLifeViewer::step()
 		if (_p->visionWindow->isOpen()) {
 			_p->drawVisualField(_p->visionWindow.get());
 			_p->visionWindow->display();
+		}
+	}
+
+	// история
+	if (!_p->historyWindow) {
+		_p->historyWindow = make_unique<sf::RenderWindow>(sf::VideoMode(200, 400), "History");
+	}
+
+	if (_p->historyWindow) {
+		if (_p->historyWindow->isOpen()) {
+			_p->drawHistory(_p->historyWindow.get());
+			_p->historyWindow->display();
 		}
 	}
 }
