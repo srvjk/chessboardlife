@@ -63,8 +63,7 @@ class MODULE_EXPORT NeighborhoodSensor : public Basis::Entity
 public:
 	NeighborhoodSensor(Basis::System* s);
 	void step();
-	std::tuple<int, int> getSize() const;
-	std::tuple<int, int, int> getPixel(int x, int y) const;
+	Private* getPrivate(); /// TODO Это неправильно!!! Таких функций быть не должно, переделать, здесь и везде.
 
 private:
 	std::unique_ptr<Private> _p;
@@ -162,9 +161,10 @@ class MODULE_EXPORT ChessboardLifeViewer : public Basis::Entity
 
 public:
 	ChessboardLifeViewer(Basis::System* s);
+	Private* getPrivate();
 	void step();
-	/// Скопировать в img фрагмент изображения мира вокруг точки (x, y)
-	void getImage(int x, int y, ChessboardTypes::Image* dstImage);
+	/// Обновить поле зрения агента
+	void updateAgentVisualField();
 
 private:
 	std::unique_ptr<Private> _p;

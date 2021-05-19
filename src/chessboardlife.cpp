@@ -178,72 +178,6 @@ struct ChessboardTypes::Image
 	std::vector<sf::Color> pixels;
 };
 
-struct NeighborhoodSensor::Private
-{
-	std::shared_ptr<ChessboardTypes::Image> neighborhoodImage;
-};
-
-NeighborhoodSensor::NeighborhoodSensor(Basis::System* s) :
-	Basis::Entity(s),
-	_p(std::make_unique<Private>())
-{
-}
-
-void NeighborhoodSensor::step()
-{
-	Basis::Spatial* spt = firstSuchParent<Basis::Spatial>();
-	if (!spt)
-		return;
-
-	Basis::point3d pos = spt->position();
-	int x = (int)pos.get<0>();
-	int y = (int)pos.get<1>();
-	auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
-	if (!chessboard)
-		return;
-
-	if (!_p->neighborhoodImage) {
-		_p->neighborhoodImage = std::make_shared<ChessboardTypes::Image>(3, 3);
-	}
-
-	//chessboard->getImage(x - 1, y - 1, _p->neighborhoodImage.get());
-
-	shared_ptr<ChessboardLifeViewer> viewer = nullptr;
-	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
-		auto ent = iter.value()->as<ChessboardLifeViewer>();
-		if (ent) {
-			viewer = ent;
-			break;
-		}
-	}
-	if (!viewer)
-		return;
-
-	viewer->getImage(x - 1, y - 1, _p->neighborhoodImage.get());
-}
-
-std::tuple<int, int> NeighborhoodSensor::getSize() const
-{
-	if (!_p->neighborhoodImage)
-		return std::make_tuple(0, 0);
-
-	return std::make_tuple(_p->neighborhoodImage->width, _p->neighborhoodImage->height);
-}
-
-std::tuple<int, int, int> NeighborhoodSensor::getPixel(int x, int y) const
-{
-	if (!_p->neighborhoodImage)
-		return std::make_tuple(0, 0, 0);
-
-	if (x < 0 || x >= _p->neighborhoodImage->width)
-		return std::make_tuple(0, 0, 0);
-	if (y < 0 || y >= _p->neighborhoodImage->height)
-		return std::make_tuple(0, 0, 0);
-
-	sf::Color c = _p->neighborhoodImage->pixels.at((size_t)(y * _p->neighborhoodImage->width) + x);
-	return std::make_tuple(c.r, c.g, c.b);
-}
-
 struct MoveAction::Private 
 {
 	Basis::Entity* object = nullptr;
@@ -580,12 +514,26 @@ sf::Color newColor(const std::map<Basis::tid, sf::Color>& colors)
 	return testColors[bestColorIndex];
 }
 
+struct NeighborhoodSensor::Private
+{
+	sf::Image visualImage;
+};
+
+NeighborhoodSensor::NeighborhoodSensor(Basis::System* s) :
+	Basis::Entity(s),
+	_p(std::make_unique<Private>())
+{
+}
+
+// TODO вернуть на место!!!
 struct ChessboardLifeViewer::Private
 {
 	std::unique_ptr<sf::RenderWindow> window = nullptr;
-	std::shared_ptr<sf::Texture> windowTexture = nullptr;
+	std::shared_ptr<sf::RenderTexture> windowTexture = nullptr;
+	std::unique_ptr<sf::RenderWindow> neighborhoodWindow = nullptr;
 	std::unique_ptr<sf::RenderWindow> visionWindow = nullptr;
 	std::unique_ptr<sf::RenderWindow> historyWindow = nullptr;
+	std::unique_ptr<sf::RenderWindow> activeAgentInfoWindow = nullptr;
 	sf::Font generalFont;
 	std::string activeAgentName = "Agent";
 	std::map<Basis::tid, sf::Color> entityColors;
@@ -593,8 +541,45 @@ struct ChessboardLifeViewer::Private
 	void drawChessboard(sf::RenderTarget* tgt);
 	void drawHistory(sf::RenderTarget* tgt);
 	void drawTimeFrame(sf::RenderTarget* tgt, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
+	void drawNeighborhood(sf::RenderTarget* tgt);
 	void drawVisualField(sf::RenderTarget* tgt);
+	sf::Image getAgentVisualImage(int imgWidth, int imgHeight);
 };
+
+void NeighborhoodSensor::step()
+{
+	Basis::Spatial* spt = firstSuchParent<Basis::Spatial>();
+	if (!spt)
+		return;
+
+	Basis::point3d pos = spt->position();
+	int x = (int)pos.get<0>();
+	int y = (int)pos.get<1>();
+	auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
+	if (!chessboard)
+		return;
+
+	shared_ptr<ChessboardLifeViewer> viewer = nullptr;
+	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
+		auto ent = iter.value()->as<ChessboardLifeViewer>();
+		if (ent) {
+			viewer = ent;
+			break;
+		}
+	}
+	if (!viewer)
+		return;
+
+	viewer->updateAgentVisualField();
+	int imgSize = 3;
+	_p->visualImage = viewer->getPrivate()->getAgentVisualImage(imgSize, imgSize);
+	//img.saveToFile("d:/chessimg.png");
+}
+
+NeighborhoodSensor::Private* NeighborhoodSensor::getPrivate()
+{
+	return _p.get();
+}
 
 void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* tgt)
 {
@@ -798,7 +783,7 @@ void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderTarget* tgt, std::sh
 	}
 }
 
-void ChessboardLifeViewer::Private::drawVisualField(sf::RenderTarget* tgt)
+void ChessboardLifeViewer::Private::drawNeighborhood(sf::RenderTarget* tgt)
 {
 	auto activeAgent = Basis::toSingle<Agent>(Basis::System::instance()->findEntitiesByName(activeAgentName));
 	if (!activeAgent)
@@ -819,6 +804,55 @@ void ChessboardLifeViewer::Private::drawVisualField(sf::RenderTarget* tgt)
 	drawChessboard(tgt);
 }
 
+void ChessboardLifeViewer::Private::drawVisualField(sf::RenderTarget* tgt)
+{
+	tgt->clear();
+
+	sf::Vector2u size = tgt->getSize();
+
+	auto activeAgent = Basis::toSingle<Agent>(Basis::System::instance()->findEntitiesByName(activeAgentName));
+	if (!activeAgent)
+		return;
+
+	std::shared_ptr<NeighborhoodSensor> near = nullptr;
+	for (auto iter = activeAgent->entityIterator(); iter.hasMore(); iter.next()) {
+		auto ent = iter.value()->as<NeighborhoodSensor>();
+		if (ent) {
+			near = ent;
+			break;
+		}
+	}
+
+	if (!near)
+		return;
+
+	sf::Texture tex;
+	tex.loadFromImage(near->getPrivate()->visualImage);
+	sf::Sprite sprite;
+	sprite.setTexture(tex);
+	tgt->draw(sprite);
+}
+
+sf::Image ChessboardLifeViewer::Private::getAgentVisualImage(int imgWidth, int imgHeight)
+{
+	if (!windowTexture)
+		return sf::Image();
+
+	const sf::Texture& tex = windowTexture->getTexture();
+	sf::Sprite sprite(tex);
+	float scaleX = (float)imgWidth / (float)tex.getSize().x;
+	float scaleY = (float)imgHeight / (float)tex.getSize().y;
+	sprite.setScale(scaleX, scaleY);
+
+	sf::RenderTexture rt;
+	rt.create(imgWidth, imgHeight);
+	rt.draw(sprite);
+	const sf::Texture& outTex = rt.getTexture();
+	sf::Image img = outTex.copyToImage();
+
+	return img;
+}
+
 ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
 	Basis::Entity(s),
 	_p(std::make_unique<Private>())
@@ -826,6 +860,11 @@ ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
 	auto exe = addFacet<Basis::Executable>();
 	if (exe)
 		exe->setStepFunction(std::bind(&ChessboardLifeViewer::step, this));
+}
+
+ChessboardLifeViewer::Private* ChessboardLifeViewer::getPrivate()
+{
+	return _p.get();
 }
 
 // Если размеры окна заданы в явном виде, создаём именно такое окно (это может быть полезно в процессе разработки).
@@ -897,11 +936,22 @@ void ChessboardLifeViewer::step()
 		_p->window->display();
 	}
 
-	// зрение
+	// окрестности агента
+	if (!_p->neighborhoodWindow) {
+		_p->neighborhoodWindow = make_unique<sf::RenderWindow>(sf::VideoMode(200, 200), "Neighborhood");
+	}
+
+	if (_p->neighborhoodWindow) {
+		if (_p->neighborhoodWindow->isOpen()) {
+			_p->drawNeighborhood(_p->neighborhoodWindow.get());
+			_p->neighborhoodWindow->display();
+		}
+	}
+
+	// "зрение" агента (т.е. окрестности агента, как он сам их видит)
 	if (!_p->visionWindow) {
 		_p->visionWindow = make_unique<sf::RenderWindow>(sf::VideoMode(200, 200), "Vision");
 	}
-
 	if (_p->visionWindow) {
 		if (_p->visionWindow->isOpen()) {
 			_p->drawVisualField(_p->visionWindow.get());
@@ -922,49 +972,22 @@ void ChessboardLifeViewer::step()
 	}
 }
 
-void ChessboardLifeViewer::getImage(int x, int y, ChessboardTypes::Image* dstImage)
+void ChessboardLifeViewer::updateAgentVisualField()
 {
 	if (!_p->window)
 		return;
-	if (!dstImage)
-		return;
+
+	auto chessboard = Basis::toSingle<Chessboard>(Basis::System::instance()->findEntitiesByName(ChessboardName));
 
 	if (!_p->windowTexture) {
-		_p->windowTexture = make_shared<sf::Texture>();
-	}
-	if (!_p->windowTexture)
-		return;
-
-	sf::Vector2u texSize = _p->windowTexture->getSize();
-	sf::Vector2u winSize = _p->window->getSize();
-	if (texSize.x != winSize.x || texSize.y != winSize.y) {
-		if (!_p->windowTexture->create(winSize.x, winSize.y))
+		_p->windowTexture = make_shared<sf::RenderTexture>();
+		if (!_p->windowTexture)
+			return;
+		if (!_p->windowTexture->create(chessboard->size(), chessboard->size()))
 			return;
 	}
 
-	_p->windowTexture->update(*_p->window);
-	sf::Image tempImage = _p->windowTexture->copyToImage();
-	const sf::Uint8* pixelsPtr = tempImage.getPixelsPtr();
-
-	// левая верхняя точка копируемого региона
-	int x0 = x - dstImage->width / 2;
-	int y0 = y - dstImage->height / 2;
-
-	for (int i = 0; i < dstImage->height; ++i) {
-		int srcY = y0 + i;
-		if (srcY >= 0 && srcY < winSize.y) {
-			int srcRowPtr = srcY * winSize.x;
-			for (int j = 0; j < dstImage->width; ++j) {
-				int srcX = x0 + j;
-				if (srcX >= 0 && srcX < winSize.x) {
-					int srcPixelIndex = srcRowPtr + srcX;
-					int srcByteIndex = srcPixelIndex * 4;
-					int dstPixelIndex = i * dstImage->width + j;
-					dstImage->pixels[dstPixelIndex] = sf::Color(*(sf::Uint32*)(pixelsPtr + srcByteIndex));
-				}
-			}
-		}
-	}
+	_p->drawNeighborhood(_p->windowTexture.get());
 }
 
 void setup(Basis::System* s)
