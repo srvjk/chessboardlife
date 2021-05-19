@@ -589,38 +589,39 @@ struct ChessboardLifeViewer::Private
 	std::string activeAgentName = "Agent";
 	std::map<Basis::tid, sf::Color> entityColors;
 
-	void draw(sf::RenderTarget* wnd);
+	void drawChessboard(sf::RenderTarget* wnd, const sf::FloatRect& rect);
+	void drawHistory(sf::RenderTarget* tgt, const sf::FloatRect& rect);
 	void drawTimeFrame(sf::RenderTarget* wnd, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
 	void drawVisualField(sf::RenderTarget* tgt);
 };
 
-void ChessboardLifeViewer::Private::draw(sf::RenderTarget* wnd)
+void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* wnd, const sf::FloatRect& rect)
 {
 	// вычисляем размер и положение области рисования, исходя из размеров окна и нужного форматного отношения:
-	double aspectRatio = 0.5625;
-	sf::Vector2f viewPos;
-	sf::Vector2f viewSize;
-	float textMargin = 5; // поля вокруг текста
-	{
-		sf::Vector2u actualSize = wnd->getSize();
+	//double aspectRatio = 0.5625;
+	//sf::Vector2f viewPos;
+	//sf::Vector2f viewSize;
+	//float textMargin = 5; // поля вокруг текста
+	//{
+	//	sf::Vector2u actualSize = wnd->getSize();
 
-		double desiredWidth = actualSize.y / aspectRatio;
-		if (desiredWidth <= actualSize.x) {
-			viewSize.x = desiredWidth;
-			viewSize.y = actualSize.y;
-		}
-		else {
-			viewSize.x = actualSize.x;
-			viewSize.y = viewSize.x * aspectRatio;
-		}
+	//	double desiredWidth = actualSize.y / aspectRatio;
+	//	if (desiredWidth <= actualSize.x) {
+	//		viewSize.x = desiredWidth;
+	//		viewSize.y = actualSize.y;
+	//	}
+	//	else {
+	//		viewSize.x = actualSize.x;
+	//		viewSize.y = viewSize.x * aspectRatio;
+	//	}
 
-		double dx = actualSize.x - viewSize.x;
-		double dy = actualSize.y - viewSize.y;
-		viewPos.x = dx / 2.0;
-		viewPos.y = dy / 2.0;
+	//	double dx = actualSize.x - viewSize.x;
+	//	double dy = actualSize.y - viewSize.y;
+	//	viewPos.x = dx / 2.0;
+	//	viewPos.y = dy / 2.0;
 
-		double viewAspectRatio = viewSize.y / viewSize.x;
-	}
+	//	double viewAspectRatio = viewSize.y / viewSize.x;
+	//}
 
 	wnd->clear();
 
@@ -635,8 +636,8 @@ void ChessboardLifeViewer::Private::draw(sf::RenderTarget* wnd)
 		sf::Color bkColor = sf::Color(50, 50, 50);
 		sf::Color foreColor = sf::Color(100, 100, 100);
 
-		outRect.setPosition(viewPos);
-		outRect.setSize(viewSize);
+		outRect.setPosition(rect.getPosition());
+		outRect.setSize(rect.getSize());
 
 		sf::Vector2f actPos = outRect.getPosition();
 		sf::Vector2f actSize = outRect.getSize();
@@ -662,8 +663,8 @@ void ChessboardLifeViewer::Private::draw(sf::RenderTarget* wnd)
 			sf::Color bkColor = sf::Color(30, 30, 30);
 			sf::Color foreColor = sf::Color(100, 100, 100);
 
-			boardRect.left = viewPos.x;
-			boardRect.top = viewPos.y;
+			boardRect.left = rect.left;
+			boardRect.top = rect.top;
 			boardRect.width = boardRectSize;
 			boardRect.height = boardRectSize;
 			board->setTopLeft(boardRect.top, boardRect.left);
@@ -683,13 +684,13 @@ void ChessboardLifeViewer::Private::draw(sf::RenderTarget* wnd)
 				for (int row = 0; row < board->size(); ++row) {
 					float x = boardRect.left;
 					for (int col = 0; col < board->size(); ++col) {
-						sf::RectangleShape rect;
-						rect.setPosition(sf::Vector2f(x, y));
-						rect.setSize(sf::Vector2f(squareSize, squareSize));
-						rect.setFillColor(bkColor);
-						rect.setOutlineColor(foreColor);
-						rect.setOutlineThickness(1.0);
-						wnd->draw(rect);
+						sf::RectangleShape rectShape;
+						rectShape.setPosition(sf::Vector2f(x, y));
+						rectShape.setSize(sf::Vector2f(squareSize, squareSize));
+						rectShape.setFillColor(bkColor);
+						rectShape.setOutlineColor(foreColor);
+						rectShape.setOutlineThickness(1.0);
+						wnd->draw(rectShape);
 						x += squareSize;
 					}
 					y += squareSize;
@@ -705,7 +706,7 @@ void ChessboardLifeViewer::Private::draw(sf::RenderTarget* wnd)
 				if (agent) {
 					sf::Color bkColor = sf::Color(200, 50, 50);
 					sf::Color foreColor = sf::Color(100, 100, 100);
-					sf::RectangleShape rect;
+					sf::RectangleShape rectShape;
 
 					auto spt = agent->as<Basis::Spatial>();
 					std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
@@ -713,10 +714,10 @@ void ChessboardLifeViewer::Private::draw(sf::RenderTarget* wnd)
 					float x = boardRect.left + square->x * squareSize;
 					float y = boardRect.top + square->y * squareSize;
 
-					rect.setPosition(sf::Vector2f(x, y));
-					rect.setSize(sf::Vector2f(squareSize, squareSize));
-					rect.setFillColor(bkColor);
-					wnd->draw(rect);
+					rectShape.setPosition(sf::Vector2f(x, y));
+					rectShape.setSize(sf::Vector2f(squareSize, squareSize));
+					rectShape.setFillColor(bkColor);
+					wnd->draw(rectShape);
 				}
 
 				auto stone = iter.value()->as<Stone>();
@@ -729,71 +730,68 @@ void ChessboardLifeViewer::Private::draw(sf::RenderTarget* wnd)
 
 					float x = boardRect.left + square->x * squareSize;
 					float y = boardRect.top + square->y * squareSize;
-					sf::RectangleShape rect;
+					sf::RectangleShape rectShape;
 
-					rect.setPosition(sf::Vector2f(x, y));
-					rect.setSize(sf::Vector2f(squareSize, squareSize));
-					rect.setFillColor(bkColor);
-					wnd->draw(rect);
+					rectShape.setPosition(sf::Vector2f(x, y));
+					rectShape.setSize(sf::Vector2f(squareSize, squareSize));
+					rectShape.setFillColor(bkColor);
+					wnd->draw(rectShape);
 				}
 			}
 		}
 	}
+}
 
-	// история
-	{
-		auto activeAgent = Basis::toSingle<Agent>(sys->findEntitiesByName(activeAgentName));
-		if (activeAgent) {
-			sf::Color bkColor = sf::Color(60, 60, 60);
-			sf::Color foreColor = sf::Color(100, 100, 100);
-			float margin = 5.0;
+void ChessboardLifeViewer::Private::drawHistory(sf::RenderTarget* tgt, const sf::FloatRect& rect)
+{
+	tgt->clear();
 
-			histRect.left = boardRect.left + boardRect.width + margin;
-			histRect.top = boardRect.top;
-			histRect.width = viewSize.x - boardRect.width - 2 * margin;
-			histRect.height = boardRect.height;
+	auto activeAgent = Basis::toSingle<Agent>(Basis::System::instance()->findEntitiesByName(activeAgentName));
+	if (activeAgent) {
+		sf::Color bkColor = sf::Color(60, 60, 60);
+		sf::Color foreColor = sf::Color(100, 100, 100);
+		float margin = 5.0;
 
-			sf::RectangleShape rectangle;
-			rectangle.setPosition(sf::Vector2f(histRect.left, histRect.top));
-			rectangle.setSize(sf::Vector2f(histRect.width, histRect.height));
+		sf::RectangleShape rectangle;
+		rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
+		rectangle.setSize(sf::Vector2f(rect.width, rect.height));
 
-			rectangle.setFillColor(bkColor);
-			rectangle.setOutlineColor(foreColor);
-			wnd->draw(rectangle);
-		}
+		rectangle.setFillColor(bkColor);
+		rectangle.setOutlineColor(foreColor);
+		tgt->draw(rectangle);
+	}
 
-		if (activeAgent) {
-			auto histCont = Basis::toSingle<Basis::Container>(activeAgent->findEntitiesByName("History"));
-			if (histCont) {
-				sf::Color bkColor = sf::Color(20, 20, 20);
-				sf::Color foreColor = sf::Color(200, 200, 200);
-				int64_t numFrames = histCont->size();
-				int64_t maxFrames = activeAgent->maxTimeFrames();
-				float margin = 2.0;
+	if (activeAgent) {
+		auto histCont = Basis::toSingle<Basis::Container>(activeAgent->findEntitiesByName("History"));
+		if (histCont) {
+			sf::Color bkColor = sf::Color(20, 20, 20);
+			sf::Color foreColor = sf::Color(200, 200, 200);
+			int64_t numFrames = histCont->size();
+			int64_t maxFrames = activeAgent->maxTimeFrames();
+			float margin = 2.0;
 
-				float frameHeight = histRect.height / maxFrames - margin;
-				float currentY = histRect.top;
+			float frameHeight = rect.height / maxFrames - margin;
+			float currentY = rect.top;
 
-				auto items = histCont->items();
-				for (auto it = items.cbegin(); it != items.cend(); ++it) {
-					sf::FloatRect rect;
-					rect.left = histRect.left;
-					rect.top = currentY;
-					rect.width = histRect.width;
-					rect.height = frameHeight;
+			auto items = histCont->items();
+			for (auto it = items.cbegin(); it != items.cend(); ++it) {
+				sf::FloatRect itemRect;
+				itemRect.left = rect.left;
+				itemRect.top = currentY;
+				itemRect.width = rect.width;
+				itemRect.height = frameHeight;
 
-					sf::RectangleShape rectangle;
-					rectangle.setPosition(sf::Vector2f(rect.left, rect.top));
-					rectangle.setSize(sf::Vector2f(rect.width, rect.height));
+				sf::RectangleShape rectangle;
+				rectangle.setPosition(sf::Vector2f(itemRect.left, itemRect.top));
+				rectangle.setSize(sf::Vector2f(itemRect.width, itemRect.height));
 
-					rectangle.setFillColor(bkColor);
-					rectangle.setOutlineColor(foreColor);
-					wnd->draw(rectangle);
+				rectangle.setFillColor(bkColor);
+				rectangle.setOutlineColor(foreColor);
+				tgt->draw(rectangle);
 
-					currentY += (frameHeight + margin);
+				currentY += (frameHeight + margin);
 
-					drawTimeFrame(wnd, *it, rect.left, rect.top, rect.width, rect.height);
-				}
+				drawTimeFrame(tgt, *it, rect.left, rect.top, rect.width, rect.height);
 			}
 		}
 	}
@@ -863,7 +861,8 @@ void ChessboardLifeViewer::Private::drawVisualField(sf::RenderTarget* tgt)
 	view.setSize(square->width * 5, square->height * 5);
 	tgt->setView(view);
 
-	draw(tgt);
+	sf::Vector2u size = tgt->getSize();
+	drawChessboard(tgt, sf::FloatRect(0, 0, size.x, size.y));
 }
 
 ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
@@ -922,7 +921,27 @@ void ChessboardLifeViewer::step()
 			}
 		}
 
-		_p->draw(_p->window.get());
+		sf::Vector2u winSize = _p->window->getSize();
+		unsigned int minSize = std::min(winSize.x, winSize.y);
+		int left = (winSize.x - minSize) / 2;
+		int top = (winSize.y - minSize) / 2;
+
+		sf::RenderWindow* wnd = _p->window.get();
+
+		auto chessboard = Basis::toSingle<Chessboard>(Basis::System::instance()->findEntitiesByName(ChessboardName));
+
+		sf::View view;
+		//view.setViewport(sf::FloatRect(left, top, minSize, minSize));
+		float boardSize = chessboard->size() * chessboard->squareSize();
+		view.reset(sf::FloatRect(0, 0, boardSize, boardSize));
+		float rx = (float)minSize / (float)winSize.x;
+		float ry = (float)minSize / (float)winSize.y;
+		view.setViewport(sf::FloatRect((float)left / (float)winSize.x, (float)top / (float)winSize.y, rx, ry));
+		//view.setSize(minSize, minSize);
+		wnd->setView(view);
+
+		//_p->drawChessboard(wnd, sf::FloatRect(left, top, minSize, minSize));
+		_p->drawChessboard(wnd, sf::FloatRect(0, 0, minSize, minSize));
 		_p->window->display();
 	}
 
