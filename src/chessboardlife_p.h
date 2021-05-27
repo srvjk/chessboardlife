@@ -43,6 +43,7 @@ struct ChessboardLifeViewer::Private
 	sf::Font generalFont;
 	std::string activeAgentName = "Agent";
 	std::map<Basis::tid, sf::Color> entityColors;
+	sf::Texture agentTexture;
 
 	void drawChessboard(sf::RenderTarget* tgt);
 	void drawHistory(sf::RenderTarget* tgt);

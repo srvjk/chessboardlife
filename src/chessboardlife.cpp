@@ -566,20 +566,23 @@ void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* tgt)
 			for (auto iter = sys->entityIterator(); iter.hasMore(); iter.next()) {
 				auto agent = iter.value()->as<Agent>();
 				if (agent) {
-					sf::Color bkColor = sf::Color(200, 50, 50);
-					sf::Color foreColor = sf::Color(100, 100, 100);
-					sf::RectangleShape rectShape;
-
 					auto spt = agent->as<Basis::Spatial>();
 					std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
 
 					float x = boardRect.left + square->x * squareSize;
 					float y = boardRect.top + square->y * squareSize;
 
-					rectShape.setPosition(sf::Vector2f(x, y));
-					rectShape.setSize(sf::Vector2f(squareSize - 1, squareSize - 1));
-					rectShape.setFillColor(bkColor);
-					tgt->draw(rectShape);
+					if (agentTexture.getSize().x < 1) {
+						bool res = agentTexture.loadFromFile("agent.png");
+						if (!res)
+							std::cerr << "Failed to load texture for Agent" << std::endl;
+					}
+
+					sf::Sprite sprite;
+					sprite.setTexture(agentTexture);
+					sprite.setScale(squareSize / agentTexture.getSize().x, squareSize / agentTexture.getSize().y);
+					sprite.setPosition(sf::Vector2f(x, y));
+					tgt->draw(sprite);
 				}
 
 				auto stone = iter.value()->as<Stone>();

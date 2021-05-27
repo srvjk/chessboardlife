@@ -27,6 +27,13 @@ namespace ChessboardTypes
 	struct Image;
 }
 
+/// Сенсор, реагирующий на одну клетку определенного цвета
+//class MODULE_EXPORT ColorSensor : public Basis::Entity
+//{
+//public:
+//	ColorSensor(Basis::System* s);
+//};
+
 class MODULE_EXPORT Agent : public Basis::Entity
 {
 	struct Private;
