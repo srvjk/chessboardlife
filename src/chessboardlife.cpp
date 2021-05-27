@@ -1,4 +1,5 @@
 #include "chessboardlife.h"
+#include "chessboardlife_p.h"
 #include <iostream>
 #include <sfml/Window.hpp>
 #include <sfml/Graphics.hpp>
@@ -7,14 +8,6 @@ using namespace std;
 
 static const string ChessboardName = "Chessboard";
 static const string NeighborhoodSensorName = "NeighborhoodSensor";
-
-struct Agent::Private
-{
-	bool isFirstStep = true;
-	int energy = 0;
-	std::list<std::shared_ptr<Basis::Entity>> actions;
-	int maxTimeFrames = 10;
-};
 
 Agent::Agent(Basis::System* s) :
 	Basis::Entity(s),
@@ -80,9 +73,6 @@ void Agent::constructHelpers()
 	shared_ptr<Entity> history = newEntity<Entity>();
 	history->setName("History");
 	history->addFacet<Basis::Container>();
-
-	shared_ptr<Entity> neighborhoodSensor = newEntity<NeighborhoodSensor>();
-	neighborhoodSensor->setName(NeighborhoodSensorName);
 }
 
 void Agent::step()
@@ -125,10 +115,25 @@ void Agent::step()
 			}
 		}
 
-		auto vision = Basis::toSingle<NeighborhoodSensor>(findEntitiesByName(NeighborhoodSensorName));
-		if (vision) {
-			vision->step();
+		// здесь действия, связанные со зрением
+		auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
+		if (!chessboard)
+			return;
+
+		shared_ptr<ChessboardLifeViewer> viewer = nullptr;
+		for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
+			auto ent = iter.value()->as<ChessboardLifeViewer>();
+			if (ent) {
+				viewer = ent;
+				break;
+			}
 		}
+		if (!viewer)
+			return;
+
+		viewer->updateAgentVisualField();
+		int imgSize = 3;
+		_p->visualImage = viewer->getPrivate()->getAgentVisualImage(imgSize, imgSize);
 	}
 
 	// выбираем очередное действие из очереди;
@@ -162,6 +167,11 @@ void Agent::setEnergy(int e)
 	_p->energy = e;
 }
 
+Agent::Private* Agent::getPrivate()
+{
+	return _p.get();
+}
+
 struct ChessboardTypes::Image 
 {
 	Image(int w, int h)
@@ -176,12 +186,6 @@ struct ChessboardTypes::Image
 	int width = 0;
 	int height = 0;
 	std::vector<sf::Color> pixels;
-};
-
-struct MoveAction::Private 
-{
-	Basis::Entity* object = nullptr;
-	std::function<void()> moveFunction = nullptr;
 };
 
 MoveAction::MoveAction(Basis::System* s) :
@@ -353,14 +357,6 @@ Stone::Stone(Basis::System* s) :
 	auto spt = addFacet<Basis::Spatial>();
 }
 
-struct Chessboard::Private 
-{
-	int size = 0;
-	float squareSize = 10;
-	sf::Vector2f topLeft;
-	vector<std::shared_ptr<ChessboardTypes::Square>> squares;
-};
-
 Chessboard::Chessboard(Basis::System* sys) :
 	Basis::Entity(sys),
 	_p(std::make_unique<Private>())
@@ -418,11 +414,6 @@ std::shared_ptr<ChessboardTypes::Square> Chessboard::getSquare(int x, int y)
 
 	return nullptr;
 }
-
-struct ChessboardLife::Private
-{
-	int boardSize = 16; /// размеры "шахматной доски"
-};
 
 ChessboardLife::ChessboardLife(Basis::System* sys) :
 	Basis::Entity(sys),
@@ -512,73 +503,6 @@ sf::Color newColor(const std::map<Basis::tid, sf::Color>& colors)
 	}
 
 	return testColors[bestColorIndex];
-}
-
-struct NeighborhoodSensor::Private
-{
-	sf::Image visualImage;
-};
-
-NeighborhoodSensor::NeighborhoodSensor(Basis::System* s) :
-	Basis::Entity(s),
-	_p(std::make_unique<Private>())
-{
-}
-
-// TODO вернуть на место!!!
-struct ChessboardLifeViewer::Private
-{
-	std::unique_ptr<sf::RenderWindow> window = nullptr;
-	std::shared_ptr<sf::RenderTexture> windowTexture = nullptr;
-	std::unique_ptr<sf::RenderWindow> neighborhoodWindow = nullptr;
-	std::unique_ptr<sf::RenderWindow> visionWindow = nullptr;
-	std::unique_ptr<sf::RenderWindow> historyWindow = nullptr;
-	std::unique_ptr<sf::RenderWindow> activeAgentInfoWindow = nullptr;
-	sf::Font generalFont;
-	std::string activeAgentName = "Agent";
-	std::map<Basis::tid, sf::Color> entityColors;
-
-	void drawChessboard(sf::RenderTarget* tgt);
-	void drawHistory(sf::RenderTarget* tgt);
-	void drawTimeFrame(sf::RenderTarget* tgt, std::shared_ptr<Entity> timeFrame, float left, float top, float width, float height);
-	void drawNeighborhood(sf::RenderTarget* tgt);
-	void drawVisualField(sf::RenderTarget* tgt);
-	sf::Image getAgentVisualImage(int imgWidth, int imgHeight);
-};
-
-void NeighborhoodSensor::step()
-{
-	Basis::Spatial* spt = firstSuchParent<Basis::Spatial>();
-	if (!spt)
-		return;
-
-	Basis::point3d pos = spt->position();
-	int x = (int)pos.get<0>();
-	int y = (int)pos.get<1>();
-	auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
-	if (!chessboard)
-		return;
-
-	shared_ptr<ChessboardLifeViewer> viewer = nullptr;
-	for (auto iter = system()->entityIterator(); iter.hasMore(); iter.next()) {
-		auto ent = iter.value()->as<ChessboardLifeViewer>();
-		if (ent) {
-			viewer = ent;
-			break;
-		}
-	}
-	if (!viewer)
-		return;
-
-	viewer->updateAgentVisualField();
-	int imgSize = 3;
-	_p->visualImage = viewer->getPrivate()->getAgentVisualImage(imgSize, imgSize);
-	//img.saveToFile("d:/chessimg.png");
-}
-
-NeighborhoodSensor::Private* NeighborhoodSensor::getPrivate()
-{
-	return _p.get();
 }
 
 void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* tgt)
@@ -783,7 +707,7 @@ void ChessboardLifeViewer::Private::drawTimeFrame(sf::RenderTarget* tgt, std::sh
 	}
 }
 
-void ChessboardLifeViewer::Private::drawNeighborhood(sf::RenderTarget* tgt)
+void ChessboardLifeViewer::Private::drawAgentNeighborhood(sf::RenderTarget* tgt)
 {
 	auto activeAgent = Basis::toSingle<Agent>(Basis::System::instance()->findEntitiesByName(activeAgentName));
 	if (!activeAgent)
@@ -804,7 +728,7 @@ void ChessboardLifeViewer::Private::drawNeighborhood(sf::RenderTarget* tgt)
 	drawChessboard(tgt);
 }
 
-void ChessboardLifeViewer::Private::drawVisualField(sf::RenderTarget* tgt)
+void ChessboardLifeViewer::Private::drawAgentVisualField(sf::RenderTarget* tgt)
 {
 	tgt->clear();
 
@@ -814,20 +738,8 @@ void ChessboardLifeViewer::Private::drawVisualField(sf::RenderTarget* tgt)
 	if (!activeAgent)
 		return;
 
-	std::shared_ptr<NeighborhoodSensor> near = nullptr;
-	for (auto iter = activeAgent->entityIterator(); iter.hasMore(); iter.next()) {
-		auto ent = iter.value()->as<NeighborhoodSensor>();
-		if (ent) {
-			near = ent;
-			break;
-		}
-	}
-
-	if (!near)
-		return;
-
 	sf::Texture tex;
-	tex.loadFromImage(near->getPrivate()->visualImage);
+	tex.loadFromImage(activeAgent->getPrivate()->visualImage);
 	sf::Sprite sprite;
 	sprite.setTexture(tex);
 	tgt->draw(sprite);
@@ -860,11 +772,6 @@ ChessboardLifeViewer::ChessboardLifeViewer(Basis::System* s) :
 	auto exe = addFacet<Basis::Executable>();
 	if (exe)
 		exe->setStepFunction(std::bind(&ChessboardLifeViewer::step, this));
-}
-
-ChessboardLifeViewer::Private* ChessboardLifeViewer::getPrivate()
-{
-	return _p.get();
 }
 
 // Если размеры окна заданы в явном виде, создаём именно такое окно (это может быть полезно в процессе разработки).
@@ -943,7 +850,7 @@ void ChessboardLifeViewer::step()
 
 	if (_p->neighborhoodWindow) {
 		if (_p->neighborhoodWindow->isOpen()) {
-			_p->drawNeighborhood(_p->neighborhoodWindow.get());
+			_p->drawAgentNeighborhood(_p->neighborhoodWindow.get());
 			_p->neighborhoodWindow->display();
 		}
 	}
@@ -954,7 +861,7 @@ void ChessboardLifeViewer::step()
 	}
 	if (_p->visionWindow) {
 		if (_p->visionWindow->isOpen()) {
-			_p->drawVisualField(_p->visionWindow.get());
+			_p->drawAgentVisualField(_p->visionWindow.get());
 			_p->visionWindow->display();
 		}
 	}
@@ -972,6 +879,11 @@ void ChessboardLifeViewer::step()
 	}
 }
 
+ChessboardLifeViewer::Private* ChessboardLifeViewer::getPrivate()
+{
+	return _p.get();
+}
+
 void ChessboardLifeViewer::updateAgentVisualField()
 {
 	if (!_p->window)
@@ -987,7 +899,7 @@ void ChessboardLifeViewer::updateAgentVisualField()
 			return;
 	}
 
-	_p->drawNeighborhood(_p->windowTexture.get());
+	_p->drawAgentNeighborhood(_p->windowTexture.get());
 }
 
 void setup(Basis::System* s)
@@ -998,7 +910,6 @@ void setup(Basis::System* s)
 	s->registerEntity<ChessboardLife>();
 	s->registerEntity<ChessboardLifeViewer>();
 	s->registerEntity<Agent>();
-	s->registerEntity<NeighborhoodSensor>();
 	s->registerEntity<MoveAction>();
 	s->registerEntity<StandByAction>();
 	s->registerEntity<MoveNorthAction>();

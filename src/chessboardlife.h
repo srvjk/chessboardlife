@@ -36,6 +36,7 @@ public:
 	void step();
 	int energy() const;
 	void setEnergy(int e);
+	Private* getPrivate();
 
 protected:
 	/// Сконструировать вспомогательные объекты и т.п.
@@ -48,22 +49,6 @@ protected:
 public:
 	/// @brief Получить максимальное количество тайм-фреймов (глубину истории).
 	int64_t maxTimeFrames() const;
-
-private:
-	std::unique_ptr<Private> _p;
-};
-
-/// @brief Сенсор окружающего пространства.
-///
-/// Дает агенту простейшее "зрение".
-class MODULE_EXPORT NeighborhoodSensor : public Basis::Entity
-{
-	struct Private;
-
-public:
-	NeighborhoodSensor(Basis::System* s);
-	void step();
-	Private* getPrivate(); /// TODO Это неправильно!!! Таких функций быть не должно, переделать, здесь и везде.
 
 private:
 	std::unique_ptr<Private> _p;
@@ -161,8 +146,8 @@ class MODULE_EXPORT ChessboardLifeViewer : public Basis::Entity
 
 public:
 	ChessboardLifeViewer(Basis::System* s);
-	Private* getPrivate();
 	void step();
+	Private* getPrivate();
 	/// Обновить поле зрения агента
 	void updateAgentVisualField();
 
