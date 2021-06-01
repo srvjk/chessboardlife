@@ -9,6 +9,23 @@ using namespace std;
 static const string ChessboardName = "Chessboard";
 static const string NeighborhoodSensorName = "NeighborhoodSensor";
 
+static double PI = 3.14159265358;
+
+double orientationAngle(const Basis::point3d& v)
+{
+	return atan2(v.get<1>(), v.get<0>());
+}
+
+double radiansToDegrees(double angle)
+{
+	return ((angle * 180.0) / PI);
+}
+
+double degreesToRadians(double angle)
+{
+	return ((angle * PI) / 180.0);
+}
+
 Agent::Agent(Basis::System* s) :
 	Basis::Entity(s),
 	_p(std::make_unique<Private>())
@@ -21,23 +38,20 @@ void Agent::makeActions()
 	int n = 5;
 
 	for (int i = 0; i < n; ++i) {
-		int v = system()->randomInt(0, 4);
+		int v = system()->randomInt(0, 3);
 		std::shared_ptr<Entity> newEnt = nullptr;
 		switch (v) {
 		case 0:
 			newEnt = system()->newEntity<StandByAction>();
 			break;
 		case 1:
-			newEnt = system()->newEntity<MoveNorthAction>();
+			newEnt = system()->newEntity<MoveForwardAction>();
 			break;
 		case 2:
-			newEnt = system()->newEntity<MoveSouthAction>();
+			newEnt = system()->newEntity<TurnLeftAction>();
 			break;
 		case 3:
-			newEnt = system()->newEntity<MoveEastAction>();
-			break;
-		case 4:
-			newEnt = system()->newEntity<MoveWestAction>();
+			newEnt = system()->newEntity<TurnRightAction>();
 			break;
 		}
 
@@ -221,45 +235,15 @@ StandByAction::StandByAction(Basis::System* s) :
 	addFacet<MoveAction>();
 }
 
-MoveNorthAction::MoveNorthAction(Basis::System* s) :
+MoveForwardAction::MoveForwardAction(Basis::System* s) :
 	Basis::Entity(s)
 {
 	auto mov = addFacet<MoveAction>();
 	if (mov)
-		mov->setMoveFunction(std::bind(&MoveNorthAction::moveFunction, this));
+		mov->setMoveFunction(std::bind(&MoveForwardAction::moveFunction, this));
 }
 
-void MoveNorthAction::moveFunction()
-{
-	auto mov = this->as<MoveAction>();
-	if (!mov)
-		return;
-
-	Basis::Entity* obj = mov->getObject();
-	if (!obj)
-		return;
-
-	auto spt = obj->as<Basis::Spatial>();
-	if (!spt)
-		return;
-
-	Basis::point3d p = spt->position();
-	double y = p.get<1>();
-	if (y >= 1.0) {
-		p.set<1>(y - 1.0);
-		spt->setPosition(p);
-	}
-}
-
-MoveSouthAction::MoveSouthAction(Basis::System* s) :
-	Basis::Entity(s)
-{
-	auto mov = addFacet<MoveAction>();
-	if (mov)
-		mov->setMoveFunction(std::bind(&MoveSouthAction::moveFunction, this));
-}
-
-void MoveSouthAction::moveFunction()
+void MoveForwardAction::moveFunction()
 {
 	auto mov = this->as<MoveAction>();
 	if (!mov)
@@ -276,25 +260,35 @@ void MoveSouthAction::moveFunction()
 	auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
 	if (!chessboard)
 		return;
+	if (chessboard->size() < 1)
+		return;
 
-	int boardSize = chessboard->size();
+	Basis::point3d pos = spt->position();
+	Basis::point3d dir = spt->orientation();
+	boost::geometry::add_point(pos, dir);
+	double x = pos.get<0>();
+	double y = pos.get<1>();
+	if (pos.get<0>() < 0)
+		pos.set<0>(0);
+	if (pos.get<1>() < 0)
+		pos.set<1>(0);
+	if (pos.get<0>() >= chessboard->size())
+		pos.set<0>((double)chessboard->size() - 1);
+	if (pos.get<1>() >= chessboard->size())
+		pos.set<1>((double)chessboard->size() - 1);
 
-	Basis::point3d p = spt->position();
-	double y = p.get<1>();
-	if (y < boardSize - 1)
-		p.set<1>(y + 1.0);
-	spt->setPosition(p);
+	spt->setPosition(pos);
 }
 
-MoveEastAction::MoveEastAction(Basis::System* s) :
+TurnLeftAction::TurnLeftAction(Basis::System* s) :
 	Basis::Entity(s)
 {
 	auto mov = addFacet<MoveAction>();
 	if (mov)
-		mov->setMoveFunction(std::bind(&MoveEastAction::moveFunction, this));
+		mov->setMoveFunction(std::bind(&TurnLeftAction::moveFunction, this));
 }
 
-void MoveEastAction::moveFunction()
+void TurnLeftAction::moveFunction()
 {
 	auto mov = this->as<MoveAction>();
 	if (!mov)
@@ -308,28 +302,25 @@ void MoveEastAction::moveFunction()
 	if (!spt)
 		return;
 
-	auto chessboard = Basis::toSingle<Chessboard>(system()->findEntitiesByName(ChessboardName));
-	if (!chessboard)
-		return;
+	Basis::point3d dir = spt->orientation();
+	double x = dir.get<0>();
+	double y = dir.get<1>();
 
-	int boardSize = chessboard->size();
-
-	Basis::point3d p = spt->position();
-	double x = p.get<0>();
-	if (x < boardSize - 1)
-		p.set<0>(x + 1.0);
-	spt->setPosition(p);
+	// меняем местами первый и второй компоненты, а затем
+	// меняем знак второму компоненту, т.е.
+	// (x, y) превращается в (y, -x)
+	spt->setOrientation({ y, -x });
 }
 
-MoveWestAction::MoveWestAction(Basis::System* s) :
+TurnRightAction::TurnRightAction(Basis::System* s) :
 	Basis::Entity(s)
 {
 	auto mov = addFacet<MoveAction>();
 	if (mov)
-		mov->setMoveFunction(std::bind(&MoveWestAction::moveFunction, this));
+		mov->setMoveFunction(std::bind(&TurnRightAction::moveFunction, this));
 }
 
-void MoveWestAction::moveFunction()
+void TurnRightAction::moveFunction()
 {
 	auto mov = this->as<MoveAction>();
 	if (!mov)
@@ -343,12 +334,14 @@ void MoveWestAction::moveFunction()
 	if (!spt)
 		return;
 
-	Basis::point3d p = spt->position();
-	double x = p.get<0>();
-	if (x >= 1.0) {
-		p.set<0>(x - 1.0);
-		spt->setPosition(p);
-	}
+	Basis::point3d dir = spt->orientation();
+	double x = dir.get<0>();
+	double y = dir.get<1>();
+
+	// меняем местами первый и второй компоненты, а затем
+	// меняем знак первому компоненту, т.е.
+	// (x, y) превращается в (-y, x)
+	spt->setOrientation({ -y, x });
 }
 
 Stone::Stone(Basis::System* s) :
@@ -453,6 +446,7 @@ ChessboardLife::ChessboardLife(Basis::System* sys) :
 			float x = _p->boardSize / 2;
 			float y = _p->boardSize / 2;
 			spt->setPosition({ x, y });
+			spt->setOrientation({ 1.0, 0.0 }); // смотрим на восток
 		}
 	}
 }
@@ -569,8 +563,8 @@ void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* tgt)
 					auto spt = agent->as<Basis::Spatial>();
 					std::shared_ptr<ChessboardTypes::Square> square = board->getSquare(spt->position().get<0>(), spt->position().get<1>());
 
-					float x = boardRect.left + square->x * squareSize;
-					float y = boardRect.top + square->y * squareSize;
+					float x = boardRect.left + square->x * squareSize + (squareSize - 1) / 2.0;
+					float y = boardRect.top + square->y * squareSize + (squareSize - 1) / 2.0;
 
 					if (agentTexture.getSize().x < 1) {
 						bool res = agentTexture.loadFromFile("agent.png");
@@ -580,8 +574,13 @@ void ChessboardLifeViewer::Private::drawChessboard(sf::RenderTarget* tgt)
 
 					sf::Sprite sprite;
 					sprite.setTexture(agentTexture);
-					sprite.setScale(squareSize / agentTexture.getSize().x, squareSize / agentTexture.getSize().y);
+					sf::Vector2u spriteSize = agentTexture.getSize();
+					sprite.setOrigin(sf::Vector2f(spriteSize.x / 2.0, spriteSize.y / 2.0));
+					sprite.setScale((squareSize - 1) / spriteSize.x, (squareSize - 1) / spriteSize.y);
 					sprite.setPosition(sf::Vector2f(x, y));
+
+					double angle = orientationAngle(spt->orientation());
+					sprite.setRotation(radiansToDegrees(angle));
 					tgt->draw(sprite);
 				}
 
@@ -915,9 +914,8 @@ void setup(Basis::System* s)
 	s->registerEntity<Agent>();
 	s->registerEntity<MoveAction>();
 	s->registerEntity<StandByAction>();
-	s->registerEntity<MoveNorthAction>();
-	s->registerEntity<MoveSouthAction>();
-	s->registerEntity<MoveEastAction>();
-	s->registerEntity<MoveWestAction>();
+	s->registerEntity<MoveForwardAction>();
+	s->registerEntity<TurnLeftAction>();
+	s->registerEntity<TurnRightAction>();
 	s->registerEntity<Stone>();
 }

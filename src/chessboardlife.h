@@ -82,31 +82,24 @@ public:
 	StandByAction(Basis::System* s);
 };
 
-class MODULE_EXPORT MoveNorthAction : public Basis::Entity
+class MODULE_EXPORT MoveForwardAction : public Basis::Entity
 {
 public:
-	MoveNorthAction(Basis::System* s);
+	MoveForwardAction(Basis::System* s);
 	void moveFunction();
 };
 
-class MODULE_EXPORT MoveSouthAction : public Basis::Entity
+class MODULE_EXPORT TurnLeftAction : public Basis::Entity
 {
 public:
-	MoveSouthAction(Basis::System* s);
+	TurnLeftAction(Basis::System* s);
 	void moveFunction();
 };
 
-class MODULE_EXPORT MoveEastAction : public Basis::Entity
+class MODULE_EXPORT TurnRightAction : public Basis::Entity
 {
 public:
-	MoveEastAction(Basis::System* s);
-	void moveFunction();
-};
-
-class MODULE_EXPORT MoveWestAction : public Basis::Entity
-{
-public:
-	MoveWestAction(Basis::System* s);
+	TurnRightAction(Basis::System* s);
 	void moveFunction();
 };
 
